@@ -2,6 +2,7 @@
 #include "mango/animation/common.h"
 #include "mango/common/server.h"
 #include "mango/common/util.h"
+#include "mango/layout/card.h"
 #include "mango/layout/dwindle.h"
 #include "mango/layout/layout.h"
 #include "mango/manage/client.h"
@@ -307,8 +308,8 @@ void buffer_set_effect(Client *c, BufferData data) {
 		wlr_scene_blur_set_corner_radii(c->blur, data.corner_location);
 
 	/* Overview cards get rounded corners directly. */
-	if (c->ov_card_tree) {
-		overview_card_set_corner_radii(c, data.corner_location);
+	if (c->card.tree) {
+		card_set_radii(c, data.corner_location);
 		return;
 	}
 
@@ -320,8 +321,10 @@ void client_draw_shadow(Client *c, struct ivec2 offsets) {
 	if (c->iskilling || !client_surface(c)->mapped || c->no_shadow)
 		return;
 
+	// Staged cards float only to leave tiling; the shadow marks windows that
+	// sit above the layout.
 	if (!config.shadows || c->isfullscreen ||
-		(!c->isfloating && config.shadow_only_floating)) {
+		((!c->isfloating || c->isstaged) && config.shadow_only_floating)) {
 		if (c->shadow->node.enabled)
 			wlr_scene_node_set_enabled(&c->shadow->node, false);
 		return;
@@ -803,6 +806,9 @@ void client_set_drop_area(Client *c) {
 	if (!c || !c->mon)
 		return;
 
+	if (stage_set_drop_area(c))
+		return;
+
 	if (!c->enable_drop_area_draw && !c->droparea->node.enabled)
 		return;
 
@@ -1003,7 +1009,7 @@ void client_apply_clip(Client *c, float factor) {
 	 * the card position/scale here and redraw the decoration nodes to match the
 	 * card geometry.
 	 */
-	if (c->ov_card_tree) {
+	if (c->card.tree) {
 		struct ivec2 offsets = compute_edge_offsets(c);
 
 		struct wlr_box clip_box;
@@ -1023,8 +1029,9 @@ void client_apply_clip(Client *c, float factor) {
 		client_draw_shield(c, surface_clip_offset);
 		client_draw_dim(c, surface_clip_offset);
 
-		overview_layout_card(c);
-		overview_card_set_corner_radii(c, set_client_corner_location(c));
+		card_layout(c);
+		overview_update_jump_label(c);
+		card_set_radii(c, set_client_corner_location(c));
 		return;
 	}
 
@@ -1038,7 +1045,7 @@ void client_apply_clip(Client *c, float factor) {
 	struct fx_corner_radii current_corner_location =
 		set_client_corner_location(c);
 
-	if (!client_animations_enabled(c) && !c->overview_scene_surface) {
+	if (!client_animations_enabled(c)) {
 		c->animation.running = false;
 		c->animation.tagining = false;
 		c->animation.tagouting = false;
@@ -1072,7 +1079,7 @@ void client_apply_clip(Client *c, float factor) {
 		 */
 		if (client_is_x11(c))
 			client_update_xwayland_clip(c, &clip_box);
-		else if (!c->overview_scene_surface)
+		else
 			wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node,
 											   &clip_box);
 
@@ -1129,7 +1136,7 @@ void client_apply_clip(Client *c, float factor) {
 	 * source_box; wlr_scene clip would scale the buffer by its physical size
 	 * and cannot be used for X11.
 	 */
-	if (!c->overview_scene_surface && !client_is_x11(c))
+	if (!client_is_x11(c))
 		wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip_box);
 
 	int32_t actual_surface_width =
@@ -1145,7 +1152,7 @@ void client_apply_clip(Client *c, float factor) {
 	buffer_data.height = clip_box.height;
 	buffer_data.corner_location = current_corner_location;
 
-	if (factor == 1.0 && !c->overview_scene_surface) {
+	if (factor == 1.0) {
 		buffer_data.width_scale = 1.0;
 		buffer_data.height_scale = 1.0;
 	} else {
@@ -1304,7 +1311,7 @@ void init_fadeout_client(Client *c) {
 	c->snapshot_temp_visible = true;
 	client_update_visibility(c);
 	client_set_border_color(c, config.bordercolor);
-	if (c->ov_card_tree) {
+	if (c->card.tree) {
 		/*
 		 * Closing in overview: the fadeout snapshot is based on the
 		 * already-scaled card tree. Snapshotting accumulates node coordinates,
@@ -1314,11 +1321,10 @@ void init_fadeout_client(Client *c) {
 		 */
 		int32_t abs_x = c->animation.current.x + (int32_t)c->bw;
 		int32_t abs_y = c->animation.current.y + (int32_t)c->bw;
-		wlr_scene_node_set_position(&c->ov_card_tree->node, abs_x, abs_y);
+		wlr_scene_node_set_position(&c->card.tree->node, abs_x, abs_y);
 		fadeout_client->scene = wlr_scene_tree_snapshot(
-			&c->ov_card_tree->node, server.layers[LyrFadeOut]);
-		overview_destroy_card(c);
-		c->overview_scene_surface = NULL;
+			&c->card.tree->node, server.layers[LyrFadeOut]);
+		card_destroy(c);
 	} else {
 		fadeout_client->scene =
 			wlr_scene_tree_snapshot(&c->scene->node, server.layers[LyrFadeOut]);
@@ -1533,7 +1539,7 @@ void resize(Client *c, struct wlr_box geo, ResizeOpts opts) {
 	}
 
 	if (!c->no_size_hint && !c->ismaximizescreen && !c->isfullscreen &&
-		c->isfloating) {
+		c->isfloating && !c->isstaged) {
 		int32_t anchor_right = c->geom.x + c->geom.width;
 		int32_t anchor_bottom = c->geom.y + c->geom.height;
 		client_set_size_bound(c);
@@ -1589,10 +1595,12 @@ void resize(Client *c, struct wlr_box geo, ResizeOpts opts) {
 		c->fake_no_border = false;
 	}
 
-	if (!c->mon->isoverview)
-		c->configure_serial =
-			client_set_size(c, c->geom.width - 2 * c->bw,
-							c->geom.height - 2 * c->bw, opts.force_configure);
+	if (!c->mon->isoverview) {
+		int32_t cw, ch;
+		stage_sync_logical(c);
+		stage_content_size(c, &cw, &ch);
+		c->configure_serial = client_set_size(c, cw, ch, opts.force_configure);
+	}
 
 	if (c->configure_serial != 0)
 		c->mon->resizing_count_pending++;
@@ -1607,6 +1615,14 @@ void resize(Client *c, struct wlr_box geo, ResizeOpts opts) {
 		c->animainit_geom = c->current = c->pending = c->animation.current =
 			c->geom;
 		wlr_scene_node_set_position(&c->scene->node, c->geom.x, c->geom.y);
+
+		// Stashed windows show a scaled card; rescale it with the border so
+		// the content does not wait for the client's next commit.
+		if (c->card.tree) {
+			stage_drag_morph(c);
+			client_apply_clip(c, 1.0f);
+			return;
+		}
 
 		client_draw_border(c, offsets);
 		client_get_clip(c, &clip);
@@ -1860,6 +1876,14 @@ bool client_draw_frame(Client *c) {
 	if (server.gesture_drive_active && c->mon == server.gesture_drive_mon &&
 		c->animation.running && c->need_output_flush) {
 		return client_apply_focus_opacity(c);
+	}
+
+	// A grab gets no motion while the pointer rests, so the pickup ease is
+	// driven from frames.
+	if (stage_drag_morph(c)) {
+		client_apply_clip(c, 1.0f);
+		client_apply_focus_opacity(c);
+		return true;
 	}
 
 	if (!c->need_output_flush)

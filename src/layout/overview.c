@@ -1,6 +1,7 @@
 #include "mango/layout/overview.h"
 #include "mango/common/server.h"
 #include "mango/config/parse.h"
+#include "mango/layout/stage.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
 #include "mango/overview/overview.h"
@@ -214,7 +215,7 @@ static void center_placed_rows(OvPlacedRect *placed, int n, float gap) {
 	free(row_order);
 }
 
-void overview_scale(Monitor *m) {
+void overview_scale(Monitor *m, struct wlr_box area) {
 	int32_t target_gappo = config.overviewgappo;
 	int32_t target_gappi = config.overviewgappi;
 
@@ -253,8 +254,8 @@ void overview_scale(Monitor *m) {
 
 	qsort(items, n, sizeof(OvLayoutItem), compare_layout_items);
 
-	float max_avail_w = fmaxf(1.0f, m->w.width - 2 * target_gappo);
-	float max_avail_h = fmaxf(1.0f, m->w.height - 2 * target_gappo);
+	float max_avail_w = fmaxf(1.0f, area.width - 2 * target_gappo);
+	float max_avail_h = fmaxf(1.0f, area.height - 2 * target_gappo);
 
 	int max_points = 1 + 3 * n;
 	OvPlacedRect *placed = calloc(n, sizeof(OvPlacedRect));
@@ -321,8 +322,8 @@ void overview_scale(Monitor *m) {
 
 		float dx = (max_avail_w - box_w) / 2.0f;
 		float dy = (max_avail_h - box_h) / 2.0f;
-		float base_x = m->w.x + target_gappo + dx;
-		float base_y = m->w.y + target_gappo + dy;
+		float base_x = area.x + target_gappo + dx;
+		float base_y = area.y + target_gappo + dy;
 
 		// Collects the target geometry of all clients and calls
 		// client_tile_resize once at the end.
@@ -416,7 +417,7 @@ void overview_layout_column(Monitor *m, Client **items, int cnt, float x,
 	free(hs);
 }
 
-void overview_scale_tab(Monitor *m) {
+void overview_scale_tab(Monitor *m, struct wlr_box area) {
 	int32_t target_gappo = config.overviewgappo;
 	int32_t target_gappi = config.overviewgappi;
 
@@ -462,8 +463,8 @@ void overview_scale_tab(Monitor *m) {
 	}
 	gap_mid *= 0.5f; /* Halves the gap between columns. */
 
-	float avail_w = fmaxf(1.0f, m->w.width - 2 * gap_edge);
-	float avail_h = fmaxf(1.0f, m->w.height - 2 * gap_edge);
+	float avail_w = fmaxf(1.0f, area.width - 2 * gap_edge);
+	float avail_h = fmaxf(1.0f, area.height - 2 * gap_edge);
 
 	// Center column ratio is configurable; both sides split the remaining space
 	// evenly.
@@ -472,8 +473,8 @@ void overview_scale_tab(Monitor *m) {
 	if (side_w < 1.0f)
 		side_w = 1.0f;
 
-	float base_x = m->w.x + gap_edge;
-	float base_y = m->w.y + gap_edge;
+	float base_x = area.x + gap_edge;
+	float base_y = area.y + gap_edge;
 
 	float left_x = base_x;
 	float center_x = base_x + side_w + gap_mid;
@@ -583,10 +584,14 @@ void finish_jump_mode(Monitor *m) {
 }
 
 void overview(Monitor *m) {
+	// Docked stage windows take strips on the edges of the work area; the cards
+	// go between them. m->w itself stays the real work area throughout.
+	struct wlr_box area = stage_overview_docks(m, m->w);
+
 	if (m->ov_tab_layout && !m->is_jump_mode && !m->ov_normal_mode) {
-		overview_scale_tab(m);
+		overview_scale_tab(m, area);
 	} else {
-		overview_scale(m);
+		overview_scale(m, area);
 	}
 
 	if (m->is_jump_mode) {

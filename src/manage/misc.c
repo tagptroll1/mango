@@ -6,6 +6,7 @@
 #include "mango/data/static_keymap.h"
 #include "mango/input/pointer.h"
 #include "mango/layout/arrange.h"
+#include "mango/layout/card.h"
 #include "mango/manage/client.h"
 #include "mango/manage/layer.h"
 #include "mango/manage/monitor.h"
@@ -219,7 +220,7 @@ bool layer_ignores_focus(LayerSurface *l) {
 			   ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE;
 }
 
-void node_at_point(double x, double y, struct wlr_surface **psurface,
+bool node_at_point(double x, double y, struct wlr_surface **psurface,
 				   Client **pc, LayerSurface **pl, MangoBarDecoration **bar,
 				   double *nx, double *ny) {
 	struct wlr_scene_node *node = NULL;
@@ -229,6 +230,7 @@ void node_at_point(double x, double y, struct wlr_surface **psurface,
 	MangoBarDecoration *mangobar = NULL;
 	int32_t layer;
 	Client *ovc = NULL;
+	bool surface_coords = false;
 
 	if (psurface)
 		*psurface = NULL;
@@ -263,11 +265,12 @@ void node_at_point(double x, double y, struct wlr_surface **psurface,
 		}
 
 		if (node->type == WLR_SCENE_NODE_BUFFER) {
+			struct wlr_scene_buffer *buffer = wlr_scene_buffer_from_node(node);
 			struct wlr_scene_surface *scene_surface =
-				wlr_scene_surface_try_from_buffer(
-					wlr_scene_buffer_from_node(node));
+				wlr_scene_surface_try_from_buffer(buffer);
 			if (scene_surface) {
 				surface = scene_surface->surface;
+				surface_coords = card_owns_buffer(buffer);
 			}
 		}
 
@@ -287,6 +290,18 @@ void node_at_point(double x, double y, struct wlr_surface **psurface,
 		if (node->type == WLR_SCENE_NODE_RECT) {
 			if (c && (c->type == XDGShell || c->type == X11)) {
 				surface = client_surface(c);
+				double sx, sy;
+				surface_coords =
+					card_surface_coords(c, surface, x, y, &sx, &sy);
+				if (surface_coords) {
+					if (nx)
+						*nx = sx;
+					if (ny)
+						*ny = sy;
+					// Decorations must honor card input rejection.
+					if (!wlr_surface_point_accepts_input(surface, sx, sy))
+						surface = NULL;
+				}
 			}
 
 			if (l && l->type == LayerShell) {
@@ -310,6 +325,9 @@ void node_at_point(double x, double y, struct wlr_surface **psurface,
 		ovc = client_at_point(x, y);
 
 		if (ovc && (!l || layer_ignores_focus(l))) {
+			surface_coords =
+				nx && ny &&
+				card_surface_coords(ovc, client_surface(ovc), x, y, nx, ny);
 			if (pc)
 				*pc = ovc;
 			if (psurface)
@@ -320,6 +338,7 @@ void node_at_point(double x, double y, struct wlr_surface **psurface,
 				*bar = NULL;
 		}
 	}
+	return surface_coords;
 }
 /*
  * Extra protocol: xdg-decoration, session lock, drm lease, image capture,
