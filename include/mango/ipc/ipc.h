@@ -91,6 +91,15 @@ void send_static_json(int fd, const char *json_str);
 /* ---------- One-shot command handling ---------- */
 void handle_command(int client_fd, const char *cmd_raw);
 
+// Idempotent dispatches report whether they changed anything here, since a
+// dispatch's return value already means "stop matching binds". handle_command
+// resets it before each dispatch and adds it to the reply once set.
+struct ipc_dispatch_result {
+	int32_t changed; // -1 unset, else 0 or 1
+	const char *reason;
+};
+extern struct ipc_dispatch_result ipc_dispatch_result;
+
 /* Pushes the device that triggered the last event to watch all-devices clients.
  */
 

@@ -12,6 +12,7 @@
 #include "mango/common/input-event-codes.h"
 #include "mango/common/log.h"
 #include "mango/dispatch/bind.h"
+#include "mango/dispatch/stage.h"
 #include "mango/input/pointer.h"
 #include "mango/manage/client.h"
 #include "mango/switcher/switcher.h"
@@ -693,6 +694,21 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		func = minimize_window;
 	} else if (strcmp(func_name, "restore_minimized") == 0) {
 		func = restore_minimized;
+	} else if (strcmp(func_name, "stage_dock") == 0) {
+		func = stage_dock;
+		(*arg).i = strcmp(arg_value, "left") == 0	   ? LEFT
+				   : strcmp(arg_value, "right") == 0   ? RIGHT
+				   : strcmp(arg_value, "nearest") == 0 ? UNDIR
+													   : -1;
+	} else if (strcmp(func_name, "stage_undock") == 0) {
+		func = stage_undock;
+	} else if (strcmp(func_name, "stage_dock_toggle") == 0) {
+		func = stage_dock_toggle;
+	} else if (strcmp(func_name, "stage_dock_move") == 0) {
+		func = stage_dock_move;
+		(*arg).i = atoi(arg_value);
+	} else if (strcmp(func_name, "stage_flip") == 0) {
+		func = stage_flip_toggle;
 	} else if (strcmp(func_name, "toggle_scratchpad") == 0) {
 		func = toggle_scratchpad;
 	} else if (strcmp(func_name, "toggle_render_border") == 0) {

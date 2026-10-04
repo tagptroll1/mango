@@ -3,6 +3,7 @@
 #include "mango/common/server.h"
 #include "mango/common/util.h"
 #include "mango/draw/text-node.h"
+#include "mango/layout/card.h"
 #include "mango/layout/layout.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
@@ -11,23 +12,6 @@
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/edges.h>
-
-/* Overview card surface node: each surface (including subsurfaces) maps to a
- * scene_surface node in the card tree; sx/sy are its coordinates relative to
- * the root surface. */
-struct ov_card_surface {
-	Client *c;
-	struct wlr_surface *surface;
-	struct wlr_scene_surface *scene_surface;
-	struct wlr_scene_buffer *buffer;
-	int sx, sy; /* Coordinates relative to the root surface */
-	bool is_root;
-	struct wl_list link;
-	struct wl_listener commit; /* Recomputes scaling after commit (commit resets
-								  dest/source). */
-	struct wl_listener
-		destroy; /* Removes the node when the surface is destroyed. */
-};
 
 // Returns 0 when the target window shares its tag with other windows.
 uint32_t want_restore_fullscreen(Client *target_client) {
@@ -46,195 +30,8 @@ uint32_t want_restore_fullscreen(Client *target_client) {
 	return 1;
 }
 
-// Recomputes layout after surface commit (scene_surface commit resets
-// dest/source and needs to be reapplied).
-void handle_overview_card_surface_commit(struct wl_listener *listener,
-										 void *data) {
-	struct ov_card_surface *entry = wl_container_of(listener, entry, commit);
-	if (entry->c && entry->c->ov_card_tree)
-		overview_layout_card(entry->c);
-}
-
-// Removes and frees the node when the surface is destroyed.
-void handle_overview_card_surface_destroy(struct wl_listener *listener,
-										  void *data) {
-	struct ov_card_surface *entry = wl_container_of(listener, entry, destroy);
-	wl_list_remove(&entry->link);
-	wl_list_remove(&entry->commit.link);
-	wl_list_remove(&entry->destroy.link);
-	free(entry);
-}
-
-// Creates a card scene_surface node for every surface (including subsurfaces).
-void overview_card_surface_add(struct wlr_surface *surface, int sx, int sy,
-							   void *data) {
-	Client *c = data;
-	if (!c->ov_card_tree)
-		return;
-
-	struct ov_card_surface *entry = ecalloc(1, sizeof(*entry));
-	entry->c = c;
-	entry->surface = surface;
-	entry->sx = sx;
-	entry->sy = sy;
-	entry->is_root = (surface == client_surface(c));
-
-	entry->scene_surface = wlr_scene_surface_create(c->ov_card_tree, surface);
-	if (!entry->scene_surface) {
-		free(entry);
-		return;
-	}
-	entry->buffer = entry->scene_surface->buffer;
-	wlr_scene_buffer_set_filter_mode(entry->buffer, WLR_SCALE_FILTER_BILINEAR);
-
-	entry->commit.notify = handle_overview_card_surface_commit;
-	wl_signal_add(&surface->events.commit, &entry->commit);
-	entry->destroy.notify = handle_overview_card_surface_destroy;
-	wl_signal_add(&surface->events.destroy, &entry->destroy);
-
-	wl_list_insert(&c->ov_card_surfaces, &entry->link);
-}
-// Updates card position and scale from the current geometry; content origin
-// uses client_get_clip geometry offset.
-void overview_layout_card(Client *c) {
-	if (!c->ov_card_tree)
-		return;
-
-	struct wlr_box geo = c->animation.current;
-	if (geo.width <= 0 || geo.height <= 0)
-		client_get_geometry(c, &geo);
-	int32_t bw = (int32_t)c->bw;
-	int32_t w = geo.width - 2 * bw;
-	int32_t h = geo.height - 2 * bw;
-	if (w <= 0 || h <= 0)
-		return;
-
-	wlr_scene_node_set_position(&c->ov_card_tree->node, bw, bw);
-
-	// Content origin (geometry offset) and card content size.
-	struct wlr_box clip;
-	client_get_clip(c, &clip);
-
-	float content_w, content_h;
-#ifdef XWAYLAND
-	struct wlr_surface *s = client_surface(c);
-	if (client_is_x11(c)) {
-		content_w = s->current.width;
-		content_h = s->current.height;
-	} else
-#endif
-	{
-		content_w = c->surface.xdg->geometry.width;
-		content_h = c->surface.xdg->geometry.height;
-	}
-	if (content_w <= 0 || content_h <= 0)
-		return;
-
-	float scale_x = (float)w / content_w;
-	float scale_y = (float)h / content_h;
-
-	int32_t vx = 0, vy = 0, vw = w, vh = h;
-	if (c->mon) {
-		struct wlr_box content_box = {
-			.x = geo.x + bw,
-			.y = geo.y + bw,
-			.width = w,
-			.height = h,
-		};
-		struct wlr_box vis;
-		if (wlr_box_intersection(&vis, &content_box, &c->mon->m)) {
-			vx = vis.x - content_box.x;
-			vy = vis.y - content_box.y;
-			vw = vis.width;
-			vh = vis.height;
-		} else {
-			vw = 0;
-			vh = 0;
-		}
-	}
-
-	struct ov_card_surface *entry;
-	wl_list_for_each(entry, &c->ov_card_surfaces, link) {
-		struct wlr_surface *es = entry->surface;
-		/* current.width/height are logical coordinates; buffer_width/height are
-		 * pixel coordinates. */
-		float lw = es->current.width;
-		float lh = es->current.height;
-
-		if (entry->is_root) {
-			/*
-			 * The root surface is clipped to fill the card; source_box is in
-			 * buffer pixels, converted by ratio.
-			 */
-			float ratio_x =
-				es->current.width > 0
-					? (float)es->current.buffer_width / es->current.width
-					: 1.0f;
-			float ratio_y =
-				es->current.height > 0
-					? (float)es->current.buffer_height / es->current.height
-					: 1.0f;
-			if (vw <= 0 || vh <= 0) {
-				wlr_scene_node_set_position(&entry->buffer->node, 0, 0);
-				wlr_scene_buffer_set_dest_size(entry->buffer, 0, 0);
-				continue;
-			}
-			wlr_scene_node_set_position(&entry->buffer->node, vx, vy);
-			wlr_scene_buffer_set_dest_size(entry->buffer, vw, vh);
-			struct wlr_fbox src = {
-				.x = (clip.x + (float)vx / scale_x) * ratio_x,
-				.y = (clip.y + (float)vy / scale_y) * ratio_y,
-				.width = ((float)vw / scale_x) * ratio_x,
-				.height = ((float)vh / scale_y) * ratio_y,
-			};
-			wlr_scene_buffer_set_source_box(entry->buffer, &src);
-		} else {
-			/* Subsurfaces are positioned and scaled relative to the content
-			 * origin. */
-			int px = (int)((entry->sx - clip.x) * scale_x);
-			int py = (int)((entry->sy - clip.y) * scale_y);
-			int dw = (int)(lw * scale_x);
-			int dh = (int)(lh * scale_y);
-
-			int cx0 = MANGO_MAX(px, vx);
-			int cy0 = MANGO_MAX(py, vy);
-			int cx1 = MANGO_MIN(px + dw, vx + vw);
-			int cy1 = MANGO_MIN(py + dh, vy + vh);
-			int cw = cx1 - cx0;
-			int ch = cy1 - cy0;
-			if (cw <= 0 || ch <= 0) {
-				wlr_scene_node_set_position(&entry->buffer->node, 0, 0);
-				wlr_scene_buffer_set_dest_size(entry->buffer, 0, 0);
-				continue;
-			}
-
-			float ratio_x =
-				es->current.width > 0
-					? (float)es->current.buffer_width / es->current.width
-					: 1.0f;
-			float ratio_y =
-				es->current.height > 0
-					? (float)es->current.buffer_height / es->current.height
-					: 1.0f;
-			float ox = (float)(cx0 - px) / scale_x;
-			float oy = (float)(cy0 - py) / scale_y;
-			wlr_scene_node_set_position(&entry->buffer->node, cx0, cy0);
-			wlr_scene_buffer_set_dest_size(entry->buffer, cw, ch);
-			struct wlr_fbox src = {
-				.x = ox * ratio_x,
-				.y = oy * ratio_y,
-				.width = ((float)cw / scale_x) * ratio_x,
-				.height = ((float)ch / scale_y) * ratio_y,
-			};
-			wlr_scene_buffer_set_source_box(entry->buffer, &src);
-		}
-	}
-
-	overview_update_jump_label(c);
-}
-
 void overview_update_jump_label(Client *c) {
-	if (!c || !c->mon || !c->ov_card_tree || !c->mon->isoverview ||
+	if (!c || !c->mon || !c->card.tree || !c->mon->isoverview ||
 		!c->mon->is_jump_mode || !c->jump_char)
 		return;
 
@@ -266,65 +63,24 @@ void overview_update_jump_label(Client *c) {
 	}
 }
 
-// Destroys the card tree and frees all surface nodes.
-void overview_destroy_card(Client *c) {
-	if (!c->ov_card_tree)
-		return;
-
-	struct ov_card_surface *entry, *tmp;
-	wl_list_for_each_safe(entry, tmp, &c->ov_card_surfaces, link) {
-		wl_list_remove(&entry->commit.link);
-		wl_list_remove(&entry->destroy.link);
-		wl_list_remove(&entry->link);
-		free(entry);
-	}
-
-	wlr_scene_node_destroy(&c->ov_card_tree->node);
-	c->ov_card_tree = NULL;
-}
-// Applies rounded corners to all buffer nodes of the card.
-void overview_card_set_corner_radii(Client *c, struct fx_corner_radii corners) {
-	struct ov_card_surface *entry;
-	wl_list_for_each(entry, &c->ov_card_surfaces, link)
-		wlr_scene_buffer_set_corner_radii(entry->buffer, corners);
-}
-
-// Entering overview: saves and disables the real scene_surface tree and builds
-// an independent card tree to display content.
+// Entering overview: every tag window shows its card and must not be disabled
+// by the subtree hiding logic.
 void overview_backup_surface(Client *c) {
-	if (c->ov_card_tree)
+	if (c->card.tree)
 		return;
 	if (!client_surface(c) || !client_surface(c)->mapped)
 		return;
 
-	// Disables the real surface tree.
-	c->overview_scene_surface = c->scene_surface;
-
-	// In overview every tag window must show its card and must not be disabled
-	// by the subtree hiding logic.
 	c->is_clip_to_hide = false;
 	client_update_visibility(c);
 
-	c->ov_card_tree = wlr_scene_tree_create(c->scene);
-	if (!c->ov_card_tree)
-		return;
-
-	// Walks the surface tree and creates a card node per surface.
-	wlr_surface_for_each_surface(client_surface(c), overview_card_surface_add,
-								 c);
+	card_create(c);
 
 	// The card tree is created at the scene top; enabled jump labels are raised
 	// above the cards.
 	if (c->jump_label_node->scene->node.enabled)
 		wlr_scene_node_raise_to_top(&c->jump_label_node->scene->node);
-
-	overview_layout_card(c);
-
-	// Feeds one frame to start the render loop (later driven by scene_surface
-	// frame-done).
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-	client_send_frame_done(c, &now);
+	overview_update_jump_label(c);
 }
 // Saves the window old state when switching from the normal view to overview.
 void overview_backup(Client *c) {
@@ -337,6 +93,7 @@ void overview_backup(Client *c) {
 	c->animation.tagouting = false;
 	c->overview_backup_geom = c->geom;
 	c->overview_backup_bw = c->bw;
+	c->overview_member = true;
 	if (c->isfloating) {
 		c->isfloating = 0;
 	}
@@ -355,7 +112,8 @@ void overview_backup(Client *c) {
 }
 // Restores window state when switching back from overview to the normal view.
 void overview_restore(Client *c, const Arg *arg) {
-	if (!c->ov_card_tree && !c->overview_scene_surface)
+	// A card tree alone may be a stage card with nothing backed up.
+	if (!c->overview_member)
 		return;
 
 	c->isfloating = c->overview_isfloatingbak;
@@ -369,13 +127,10 @@ void overview_restore(Client *c, const Arg *arg) {
 	c->animation.tagining = false;
 	c->is_restoring_from_ov = (arg->ui & c->tags & TAGMASK) == 0 ? true : false;
 
-	// Destroys the card tree and restores the real scene_surface tree.
-	overview_destroy_card(c);
-	if (c->overview_scene_surface) {
-		c->scene_surface = c->overview_scene_surface;
-		c->overview_scene_surface = NULL;
-		client_update_visibility(c);
-	}
+	// Staged windows keep their card: the stage draws them as cards too, and a
+	// rebuild would flash the live surface.
+	if (!c->isstaged)
+		card_destroy(c);
 
 	if (c->isfloating) {
 		// XRaiseWindow(display, c->win); // Raise the floating window to the
@@ -406,4 +161,16 @@ void overview_restore(Client *c, const Arg *arg) {
 	if (c->isfloating && !c->force_tiled_state) {
 		client_set_tiled(c, WLR_EDGE_NONE);
 	}
+
+	c->overview_member = false;
+}
+
+// Overview state belongs to one monitor: hand it back before the client
+// leaves, and back up again if the new monitor is in overview too.
+void overview_change_mon(Client *c, Monitor *m) {
+	if (!c->overview_member || !c->mon || !m || m == c->mon)
+		return;
+	overview_restore(c, &(Arg){.ui = c->tags});
+	if (m->isoverview)
+		overview_backup(c);
 }

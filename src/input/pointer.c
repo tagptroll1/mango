@@ -11,6 +11,7 @@
 #include "mango/input/trackpad.h"
 #include "mango/ipc/ipc.h"
 #include "mango/layout/arrange.h"
+#include "mango/layout/card.h"
 #include "mango/layout/dwindle.h"
 #include "mango/layout/layout.h"
 #include "mango/layout/scroll.h"
@@ -1010,11 +1011,14 @@ bool pointer_begin_move_resize(Client *gc, uint32_t mode, double x, double y,
 	server.grab_client = gc;
 	server.grab_is_border_resize = edge != 0;
 
-	if (gc->isfloating == 0 && mode == CurMove)
+	if (mode == CurMove && stage_begin_move(gc, x, y)) {
+		/* Stage stashes the window and sizes it itself. */
+	} else if (gc->isfloating == 0 && mode == CurMove) {
 		client_begin_drag_float(gc);
+	}
 
 	if (gc->drag_to_tile && config.drag_tile_to_tile &&
-		config.drag_tile_small) {
+		config.drag_tile_small && !gc->isstaged) {
 		gc->geom.x = (int32_t)round(x) - 150;
 		gc->geom.y = (int32_t)round(y) - 150;
 		gc->geom.width = 300;
@@ -1093,6 +1097,7 @@ void pointer_end_grab_client(bool follow_pointer) {
 		server.cursor_mode == CurPressed)
 		return;
 
+	bool moving = server.cursor_mode == CurMove;
 	moved = server.cursor->x != server.grab_pointer_x ||
 			server.cursor->y != server.grab_pointer_y;
 	/* A plain click on a resize border must not snap the window; every other
@@ -1131,7 +1136,9 @@ void pointer_end_grab_client(bool follow_pointer) {
 	server.grab_client = NULL;
 	server.start_drag_window = false;
 	server.last_apply_drag_time = 0;
-	if (gc->drag_to_tile && config.drag_tile_to_tile) {
+	if (moving && stage_drop(gc)) {
+		/* Placed by the stage layout. */
+	} else if (gc->drag_to_tile && config.drag_tile_to_tile) {
 		pointer_place_drag_tile(gc);
 		gc->float_geom = gc->drag_tile_float_backup_geom;
 	} else if (!border_resize || moved) {
@@ -1270,8 +1277,8 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 	}
 
 	/* Find the client under the pointer and send the event along. */
-	node_at_point(server.cursor->x, server.cursor->y, &surface, &c, NULL, &bar,
-				  &sx, &sy);
+	bool surface_coords = node_at_point(server.cursor->x, server.cursor->y,
+										&surface, &c, NULL, &bar, &sx, &sy);
 
 	/* While a grab owns the pointer the bar under it is not really hovered. */
 	if (server.cursor_mode != CurMove && server.cursor_mode != CurResize) {
@@ -1300,6 +1307,8 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 		surface = server.seat->pointer_state.focused_surface;
 		sx = server.cursor->x - (l ? l->scene->node.x : w->geom.x);
 		sy = server.cursor->y - (l ? l->scene->node.y : w->geom.y);
+		surface_coords = card_surface_coords(w, surface, server.cursor->x,
+											 server.cursor->y, &sx, &sy);
 	}
 
 	/* Update drag icon's position */
@@ -1335,6 +1344,7 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 			.y = (int32_t)round(server.cursor->y) - server.grab_offset_y,
 			.width = server.grab_client->geom.width,
 			.height = server.grab_client->geom.height};
+		stage_drag_motion(server.grab_client, time);
 		Client *target = NULL;
 		if (server.grab_client->drag_to_tile)
 			target = group_bar_target_at(server.cursor->x, server.cursor->y,
@@ -1410,7 +1420,9 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 			   speed < config.edge_scroller_focus_allow_speed) &&
 			  c && c->mon && ISSCROLLTILED(c) && is_scroller_layout(c->mon) &&
 			  !INSIDEMON(c))) {
-			pointer_focus(c, surface, sx, sy, time);
+			// Card mapping already includes X11 scaling.
+			double scale = surface_coords ? 1.0 : pointer_surface_scale(c);
+			pointer_focus(c, surface, sx * scale, sy * scale, time);
 		}
 
 		if (should_lock && c && c->mon && ISTILED(c) && c == c->mon->sel) {
@@ -1479,12 +1491,6 @@ void pointer_focus(Client *c, struct wlr_surface *surface, double sx, double sy,
 	/* Let the client know that the mouse cursor has entered one
 	 * of its surfaces, and make keyboard focus follow if desired.
 	 * wlroots makes this a no-op if surface is already focused */
-
-	/* X11 windows use physical sizes, so surface-local coordinates are also
-	 * multiplied by xwayland_scale. */
-	double scale = pointer_surface_scale(c);
-	sx *= scale;
-	sy *= scale;
 
 	if (!c || !c->mon || !c->mon->isoverview) {
 		// don't let window get pointer focus,
@@ -1625,6 +1631,9 @@ Client *find_closest_tiled_client(Client *c) {
 	Client *tc, *closest = NULL;
 	long min_dist = LONG_MAX;
 	Monitor *cursor_mon = monitor_at_point(server.cursor->x, server.cursor->y);
+
+	if (is_stage_layout(cursor_mon))
+		return stage_tile_at_cursor(cursor_mon, c);
 
 	wl_list_for_each(tc, &server.clients, link) {
 		if (tc == c || !ISTILED(tc) || !VISIBLEON(tc, cursor_mon))

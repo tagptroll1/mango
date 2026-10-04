@@ -16,6 +16,7 @@
 #include "mango/layout/layout.h"
 #include "mango/layout/overview.h"
 #include "mango/layout/scroll.h"
+#include "mango/layout/stage.h"
 #include "mango/manage/client.h"
 #include "mango/manage/misc.h"
 #include "mango/manage/monitor.h"
@@ -2296,8 +2297,10 @@ static void set_overview(const Arg *arg, bool enter) {
 		wl_list_for_each(c, &server.clients, link) {
 			if (!c || c->mon != server.selected_monitor)
 				continue;
+			// Docked stage windows are minimized but listed in overview.
 			if (!client_is_unmanaged(c) && !client_is_x11_popup(c) &&
-				!c->isminimized && !c->isunglobal && !(c->tags & TAG0_MASK) &&
+				(!c->isminimized || c->stage_docked) && !c->isunglobal &&
+				!(c->tags & TAG0_MASK) &&
 				overview_client_on_current_tags(c, only_current, current_tags))
 				visible_client_number++;
 		}
@@ -2341,8 +2344,8 @@ static void set_overview(const Arg *arg, bool enter) {
 			if (!c || c->mon != server.selected_monitor)
 				continue;
 			if (client_is_unmanaged(c) || client_is_x11_popup(c) ||
-				c->isunglobal || c->isminimized || (c->tags & TAG0_MASK) ||
-				!client_surface(c)->mapped ||
+				c->isunglobal || (c->isminimized && !c->stage_docked) ||
+				(c->tags & TAG0_MASK) || !client_surface(c)->mapped ||
 				!overview_client_on_current_tags(c, only_current, current_tags))
 				continue;
 			c->animation.overining = true;
@@ -2364,7 +2367,8 @@ static void set_overview(const Arg *arg, bool enter) {
 			target;
 		wl_list_for_each(c, &server.clients, link) {
 			if (c && c->mon == server.selected_monitor && !c->iskilling &&
-				!client_is_unmanaged(c) && !c->isunglobal && !c->isminimized &&
+				!client_is_unmanaged(c) && !c->isunglobal &&
+				(!c->isminimized || c->stage_docked) &&
 				!client_is_x11_popup(c) && client_surface(c)->mapped &&
 				!(c->tags & TAG0_MASK)) {
 				overview_restore(c, &(Arg){.ui = target});
@@ -2373,6 +2377,10 @@ static void set_overview(const Arg *arg, bool enter) {
 	}
 
 	client_switch_view(&(Arg){.ui = target}, false);
+
+	// Picking a docked card undocks it, a way back that needs no shell widget.
+	if (!enter && sel && sel->stage_docked)
+		stage_undock_window(sel);
 
 	/* Tab layout: rearrange after entering. */
 	if (enter && !server.selected_monitor->is_jump_mode &&

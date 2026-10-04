@@ -185,6 +185,13 @@ It is formed by tag numbers `1`–`9`, optionally combined with `|`.
 | `dwindle_split_horizontal` | - | Set split window direction to horizontal in dwindle layout. |
 | `dwindle_split_vertical` | - | Set split window direction to vertical in dwindle layout. |
 | `dwindle_toggle_current_split` | - | Toggle split direction of current window in dwindle layout. |
+| `stage_flip` | - | Stage layout: switch the focused monitor's stage tiles between side by side and stacked. |
+| `stage_dock` | `left/right/nearest` | Stage layout: dock the focused stage card on that edge (`nearest`: the closer one), or move its dock there. Any other value is rejected (`bad-edge`). |
+| `stage_undock` | - | Stage layout: undock the focused window back to a card beside its edge. |
+| `stage_dock_toggle` | - | Stage layout: undock the focused window if docked, else dock it on the nearest edge. |
+| `stage_dock_move` | `y` | Stage layout: move a dock along its edge to `y` pixels from the monitor top (clamped to the monitor). Needs a target window: `mmsg dispatch stage_dock_move,<y> client,<id>`. |
+
+The stage dock dispatches act on the window given by `client,<id>` over IPC, else on the focused window (except `stage_dock_move`, which needs `client,<id>`). See [Stage Layout](/docs/window-management/layouts#stage-layout) and [IPC](/docs/ipc#stage-layout).
 
 ### System
 

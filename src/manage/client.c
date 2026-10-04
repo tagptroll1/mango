@@ -11,6 +11,7 @@
 #include "mango/input/pointer.h"
 #include "mango/ipc/ipc.h"
 #include "mango/layout/arrange.h"
+#include "mango/layout/card.h"
 #include "mango/layout/dwindle.h"
 #include "mango/layout/layout.h"
 #include "mango/layout/scroll.h"
@@ -2015,7 +2016,6 @@ void init_client_properties(Client *c) {
 	c->group_bar = NULL;
 	c->tab_bar = NULL;
 	c->dim_node = NULL;
-	c->overview_scene_surface = NULL;
 	c->drop_direction = UNDIR;
 	c->enable_drop_area_draw = false;
 	c->isfocusing = false;
@@ -2088,11 +2088,9 @@ void init_client_properties(Client *c) {
 	c->allow_shortcuts_inhibit = SHORTCUTS_INHIBIT_ENABLE;
 	c->idleinhibit_when_focus = 0;
 	c->vrr_only_fullscreen = 0;
-	/* On unmap while in overview, destroy the card tree first to avoid a leak.
-	 */
-	overview_destroy_card(c);
-	c->ov_card_tree = NULL;
-	wl_list_init(&c->ov_card_surfaces);
+	/* No-op without a card; either way the no-card state follows. */
+	card_destroy(c);
+	c->overview_member = false;
 	c->force_render = 0;
 	c->activation_bypass = 0;
 	c->scroller_proportion_single = 0.0f;
@@ -2355,8 +2353,12 @@ void handle_client_map(struct wl_listener *listener, void *data) {
 	// set border color
 	client_update_border_color(c);
 
-	if (c->mon && c->mon->isoverview) {
-		overview_backup_surface(c);
+	// Joins overview like the clients backed up on entry, with the same
+	// exclusions as the exit loop so its restore runs. A swallow already
+	// inherited membership.
+	if (c->mon && c->mon->isoverview && !c->overview_member && !c->isunglobal &&
+		!(c->tags & TAG0_MASK)) {
+		overview_backup(c);
 	}
 
 	// make sure the animation is open type
@@ -2367,9 +2369,10 @@ void handle_client_map(struct wl_listener *listener, void *data) {
 
 static bool client_xdg_size_pending(Client *c) {
 	struct wlr_xdg_toplevel_state *state = &c->surface.xdg->toplevel->current;
+	int32_t w, h;
 
-	return state->width != (int32_t)(c->geom.width - 2 * (int32_t)c->bw) ||
-		   state->height != (int32_t)(c->geom.height - 2 * (int32_t)c->bw);
+	stage_content_size(c, &w, &h);
+	return state->width != w || state->height != h;
 }
 
 void handle_client_commit(struct wl_listener *listener, void *data) {
@@ -2429,6 +2432,11 @@ void handle_client_commit(struct wl_listener *listener, void *data) {
 	if (c->configure_serial &&
 		c->configure_serial <= c->surface.xdg->current.configure_serial)
 		c->configure_serial = 0;
+
+	/* A stashed client that settled on another size (min size) keeps it. */
+	if (c->isstaged && !c->configure_serial)
+		stage_adopt_size(c, c->surface.xdg->geometry.width,
+						 c->surface.xdg->geometry.height);
 
 	if (!c->dirty) {
 		new_geo = &c->surface.xdg->geometry;
@@ -2612,6 +2620,7 @@ void handle_client_unmap(struct wl_listener *listener, void *data) {
 		c->image_capture_scene = NULL;
 	}
 
+	stage_forget(c);
 	init_client_properties(c);
 
 	wlr_scene_node_destroy(&c->scene->node);
@@ -3150,6 +3159,7 @@ void client_set_monitor(Client *c, Monitor *m, uint32_t newtags, bool focus) {
 		oldmon->prevsel = NULL;
 	}
 
+	overview_change_mon(c, m);
 	c->mon = m;
 
 	/* Scene graph sends surface leave/enter events on move and resize */
@@ -3326,6 +3336,9 @@ void client_apply_fullscreen(
 	if (c->mon->isoverview)
 		return;
 
+	if (fullscreen)
+		stage_unstash(c);
+
 	c->isfullscreen = fullscreen;
 
 	client_set_fullscreen(c, fullscreen);
@@ -3391,6 +3404,9 @@ void client_set_maximize_screen(Client *c, int32_t maximizescreen,
 
 	if (c->mon->isoverview)
 		return;
+
+	if (maximizescreen)
+		stage_unstash(c);
 
 	client_pending_maximized_state(c, maximizescreen);
 
@@ -3801,12 +3817,16 @@ void client_replace(Client *c, Client *w, bool is_group_change_member,
 	mango_bar_decoration_set_focus(c->group_bar, c->is_group_focus);
 
 	/* If the old window is in overview, destroy its card tree. */
-	overview_destroy_card(w);
-	if (w->overview_scene_surface) {
-		w->overview_scene_surface = NULL;
-	}
+	card_destroy(w);
 
-	if (c->mon && c->mon->isoverview) {
+	// c takes over w's overview slot, so exit restores w's saved state.
+	c->overview_member = w->overview_member;
+	c->overview_backup_bw = w->overview_backup_bw;
+	c->overview_isfloatingbak = w->overview_isfloatingbak;
+	c->overview_isfullscreenbak = w->overview_isfullscreenbak;
+	c->overview_ismaximizescreenbak = w->overview_ismaximizescreenbak;
+	w->overview_member = false;
+	if (c->overview_member) {
 		overview_backup_surface(c);
 	}
 
@@ -3915,6 +3935,7 @@ static void client_reassign_monitor(Client *c, Monitor *m) {
 	if (old_mon->prevsel == c)
 		old_mon->prevsel = NULL;
 
+	overview_change_mon(c, m);
 	c->mon = m;
 	if (!VISIBLEON(c, m))
 		client_reset_mon_tags(c, m, 0);
@@ -4110,10 +4131,12 @@ bool client_should_visible(Client *c) {
 	if (c->is_clip_to_hide)
 		return false;
 
-	if (c->ov_card_tree)
-		return true;
+	if (c->stage_docked &&
+		!(c->mon && c->mon->isoverview && c->overview_member &&
+		  (c->tags & c->mon->tagset[c->mon->seltags])))
+		return false;
 
-	if (c->mon && c->mon->isoverview && c->overview_scene_surface)
+	if (c->overview_member && c->mon && c->mon->isoverview)
 		return true;
 
 	if (c->is_tab_hidden)
@@ -4154,8 +4177,7 @@ void client_update_visibility(Client *c) {
 	if (c->scene->node.enabled != show)
 		wlr_scene_node_set_enabled(&c->scene->node, show);
 
-	bool surface_show =
-		!c->is_surface_hidden && !c->ov_card_tree && !c->overview_scene_surface;
+	bool surface_show = !c->is_surface_hidden && !c->card.tree;
 
 	if (c->scene_surface && c->scene_surface->node.enabled != surface_show)
 		wlr_scene_node_set_enabled(&c->scene_surface->node, surface_show);
@@ -4173,7 +4195,7 @@ void client_add_jump_label_node(Client *c) {
 	if (!c->jump_label_node)
 		return;
 	/* In overview, labels must be displayed above the card tree. */
-	if (c->ov_card_tree)
+	if (c->card.tree)
 		wlr_scene_node_raise_to_top(&c->jump_label_node->scene->node);
 	else
 		wlr_scene_node_lower_to_bottom(&c->jump_label_node->scene->node);
@@ -4626,8 +4648,7 @@ void client_get_x11_geometry(Client *c, struct wlr_box *xgeo) {
 		 * logical geometry -> physical coordinates, X11 renders 1:1. */
 		xgeo->x = c->geom.x + (int32_t)c->bw;
 		xgeo->y = c->geom.y + (int32_t)c->bw;
-		xgeo->width = c->geom.width - 2 * (int32_t)c->bw;
-		xgeo->height = c->geom.height - 2 * (int32_t)c->bw;
+		stage_content_size(c, &xgeo->width, &xgeo->height);
 		xwayland_logical_to_x11(xgeo, c->xwayland_scale);
 	}
 }
@@ -4740,6 +4761,11 @@ void handle_xwayland_surface_request_configure(struct wl_listener *listener,
 	 * client_set_size().
 	 */
 	c->xwl_req_valid = false;
+
+	if (c->isstaged) {
+		stage_adopt_size(c, new_geo.width, new_geo.height);
+		return;
+	}
 
 	if (c->isfloating && c != server.grab_client) {
 		new_geo.x = new_geo.x - c->bw;

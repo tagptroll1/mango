@@ -5,6 +5,7 @@
 #include "mango/ext-protocol/ext-workspace.h"
 #include "mango/input/device.h"
 #include "mango/input/keyboard.h"
+#include "mango/ipc/stage.h"
 #include "mango/layout/layout.h"
 #include "mango/manage/client.h"
 #include "mango/manage/layer.h"
@@ -27,6 +28,8 @@
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
+
+struct ipc_dispatch_result ipc_dispatch_result = {-1, NULL};
 
 static struct wl_list ipc_watch_clients;
 static int ipc_device_watch_count;
@@ -588,6 +591,7 @@ cJSON *build_client_json(Client *c) {
 	cJSON_AddNumberToObject(obj, "height", c->geom.height);
 	cJSON_AddNumberToObject(obj, "scroller_proportion",
 							(double)c->scroller_proportion);
+	stage_client_json(c, obj);
 	return obj;
 }
 cJSON *build_monitor_json(Monitor *m) {
@@ -859,8 +863,7 @@ void handle_command(int client_fd, const char *cmd_raw) {
 			if (field_start && strncmp(ptr, "client,", 7) == 0) {
 				char *end;
 				long id = strtol(ptr + 7, &end, 10);
-				if (id > 0 && end > ptr + 7 &&
-					(*end == '\0' || *end == ',')) {
+				if (id > 0 && end > ptr + 7 && (*end == '\0' || *end == ',')) {
 					client_id = (int)id;
 					ptr = end;
 					if (*ptr == ',')
@@ -905,8 +908,21 @@ void handle_command(int client_fd, const char *cmd_raw) {
 		}
 
 		if (func) {
+			ipc_dispatch_result = (struct ipc_dispatch_result){-1, NULL};
 			func(&arg);
-			send_static_json(client_fd, "{\"success\":true}\n");
+			if (ipc_dispatch_result.changed < 0) {
+				send_static_json(client_fd, "{\"success\":true}\n");
+			} else {
+				cJSON *r = cJSON_CreateObject();
+				cJSON_AddBoolToObject(r, "success", true);
+				cJSON_AddBoolToObject(r, "changed",
+									  ipc_dispatch_result.changed);
+				if (ipc_dispatch_result.reason)
+					cJSON_AddStringToObject(r, "reason",
+											ipc_dispatch_result.reason);
+				ipc_notify_json_to_fd(client_fd, r);
+				cJSON_Delete(r);
+			}
 		} else {
 			send_static_json(client_fd, "{\"error\":\"unknown function\"}\n");
 		}

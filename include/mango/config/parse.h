@@ -341,6 +341,18 @@ typedef struct {
 	int32_t scroller_prefer_overspread;
 	int32_t edge_scroller_pointer_focus;
 	double edge_scroller_focus_allow_speed;
+	float stage_scale_max;
+	float stage_scale_min;
+	float stage_scale_curve;
+	int32_t stage_shrink_zone;
+	int32_t stage_dock_tiny;
+	int32_t stage_dock_zone;
+	int32_t stage_dock_mini_zone;
+	float stage_overview_dock_ratio;
+	int32_t stage_shake_flips;
+	int32_t stage_shake_travel;
+	int32_t stage_shake_window_ms;
+	float stage_text_zoom;
 	int32_t focus_cross_monitor;
 	int32_t focusdir_only_zone_overlap;
 	int32_t exchange_cross_monitor;

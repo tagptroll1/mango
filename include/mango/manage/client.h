@@ -5,6 +5,7 @@
 #include "mango/common/types.h"
 #include "mango/config/parse.h"
 #include "mango/draw/dim-node.h"
+#include "mango/layout/card.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -81,7 +82,6 @@ struct Client {
 	struct wlr_scene *image_capture_scene;
 	struct wlr_ext_image_capture_source_v1 *image_capture_source;
 	struct wlr_scene_surface *image_capture_scene_surface;
-	struct wlr_scene_tree *overview_scene_surface;
 	MangoJumpLabel *jump_label_node;
 	MangoDimNode *dim_node;
 	struct wl_list link;
@@ -130,14 +130,16 @@ struct Client {
 		vrr_only_fullscreen, force_render, activation_bypass;
 	int32_t ismaximizescreen;
 	int32_t overview_backup_bw;
+	/* Stage cards also use the card tree, so overview ownership needs its own
+	 * flag: set by overview_backup(), cleared by overview_restore(). */
+	bool overview_member;
 	int32_t fullscreen_backup_x, fullscreen_backup_y, fullscreen_backup_w,
 		fullscreen_backup_h;
 	int32_t overview_isfullscreenbak, overview_ismaximizescreenbak,
 		overview_isfloatingbak;
 
-	struct wlr_scene_tree *ov_card_tree; /* Overview card tree (root surface
-											plus all subsurface nodes). */
-	struct wl_list ov_card_surfaces;	 /* struct ov_card_surface list */
+	/* Stage stashes and overview draw the client through this card. */
+	struct card_state card;
 
 	struct wlr_xdg_toplevel_decoration_v1 *decoration;
 	struct wl_listener foreign_activate_request;
@@ -240,6 +242,18 @@ struct Client {
 	bool snapshot_temp_visible;
 	/* per-frame: surface clipped away by the draw path */
 	bool is_surface_hidden;
+	/* Stage layout: stashed at stage_lw x stage_lh, shown scaled on a card. */
+	bool isstaged;
+	int32_t stage_lw, stage_lh;
+	float stage_scale;
+	/* Docked: hidden like a minimize, drawn by the shell at an edge. */
+	bool stage_docked;
+	int32_t stage_dock_edge, stage_dock_tier, stage_dock_y;
+	/* Dock a release would make right now, for the shell to preview. */
+	bool stage_previewing;
+	int32_t stage_preview_edge, stage_preview_tier, stage_preview_y;
+	/* Monitor the drop lands on; mon stays the source until the drop. */
+	Monitor *stage_preview_mon;
 };
 
 #define CLIENT_GROUP_PREV_OFF offsetof(Client, group_prev)

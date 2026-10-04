@@ -108,6 +108,11 @@ struct Pertag {
 	const Layout *config_ltidxs[PERTAG_SLOTS];
 	const Layout *ltidxs[PERTAG_SLOTS];
 	struct TagScrollerState *scroller_state[PERTAG_SLOTS];
+	// Stage center: stacked instead of side by side, and divider positions as
+	// fractions of the square, where 0 means half.
+	int32_t stage_flip[PERTAG_SLOTS];
+	float stage_split_x[PERTAG_SLOTS];
+	float stage_split_y[PERTAG_SLOTS];
 };
 
 bool is_special_active(const Monitor *m);

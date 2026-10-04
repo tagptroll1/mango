@@ -911,6 +911,8 @@ void monitor_close(Monitor *m) {
 		toggle_overview(&(Arg){0});
 	}
 
+	stage_monitor_close(m);
+
 	if (!nmons) {
 		set_selected_monitor(NULL);
 	} else if (m == server.selected_monitor) {

@@ -1041,6 +1041,8 @@ void resize_tile_client(Client *gc, bool isdrag, int32_t offsetx,
 			   current_layout->id == FAIR ||
 			   current_layout->id == VERTICAL_FAIR) {
 		resize_tile_grid_fair(gc, isdrag, offsetx, offsety, time);
+	} else if (current_layout->id == STAGE) {
+		stage_resize_tile(gc, isdrag, offsetx, offsety, time);
 	}
 }
 
@@ -1301,6 +1303,9 @@ void tag_gather_reset_slot(Monitor *m, uint32_t tag) {
 	m->pertag->open_as_floating[tag] = 0;
 	m->pertag->dwindle_root[tag] = NULL;
 	m->pertag->scroller_state[tag] = NULL;
+	m->pertag->stage_flip[tag] = 0;
+	m->pertag->stage_split_x[tag] = 0.0f;
+	m->pertag->stage_split_y[tag] = 0.0f;
 
 	for (i = 0; i < config.tag_rules_count; i++) {
 		const ConfigTagRule *tr = &config.tag_rules[i];
@@ -1329,6 +1334,9 @@ void tag_gather_move_pertag(Monitor *m, uint32_t dst, uint32_t src) {
 	m->pertag->config_ltidxs[dst] = m->pertag->config_ltidxs[src];
 	m->pertag->ltidxs[dst] = m->pertag->ltidxs[src];
 	m->pertag->scroller_state[dst] = m->pertag->scroller_state[src];
+	m->pertag->stage_flip[dst] = m->pertag->stage_flip[src];
+	m->pertag->stage_split_x[dst] = m->pertag->stage_split_x[src];
+	m->pertag->stage_split_y[dst] = m->pertag->stage_split_y[src];
 	tag_gather_reset_slot(m, src);
 }
 
@@ -1424,6 +1432,7 @@ Layout layouts[] = {
 	{"F", fair, fair_predict, "fair", FAIR},
 	{"VF", vertical_fair, vertical_fair_predict, "vertical_fair",
 	 VERTICAL_FAIR},
+	{"ST", stage, NULL, "stage", STAGE},
 };
 
 bool special_handle_empty_view(Monitor *m, bool from_view) {
@@ -1459,6 +1468,9 @@ void arrange(Monitor *m, bool want_animation, bool from_view) {
 
 	if (special_handle_empty_view(m, from_view))
 		return;
+
+	if (!m->isoverview && !is_stage_layout(m))
+		stage_release_all(m);
 
 	pre_calculate_before_arrange(m, want_animation, from_view, false);
 	/* Must run after pre_calculate: global windows get their tags rewritten
