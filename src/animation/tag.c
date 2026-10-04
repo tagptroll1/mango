@@ -3,6 +3,7 @@
 #include "mango/common/server.h"
 #include "mango/common/util.h"
 #include "mango/layout/layout.h"
+#include "mango/layout/stage.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
 #include "mango/manage/tab.h"
@@ -168,9 +169,12 @@ void set_tagout_animation(Monitor *m, Client *c) {
 void set_arrange_hidden(Monitor *m, Client *c, bool want_animation) {
 	c->tag_visible = false;
 
+	if (stage_arrange_hidden(m, c))
+		return;
+
 	/* In overview every tag window must show its card and must not be disabled
 	 * by the hiding logic. */
-	if (c->ov_card_tree) {
+	if (c->overview_member && m->isoverview) {
 		c->is_clip_to_hide = false;
 		client_update_visibility(c);
 		c->animation.running = false;

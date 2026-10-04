@@ -74,6 +74,9 @@ Invoke an internal compositor function.
 The function name and its arguments are separated by commas.
 Optionally add \fBclient,<id>\fR (before or after the function) to target a
 specific client.
+The reply is \fB{"success":true}\fR; functions that report their effect, such
+as the stage dock functions, add \fBchanged\fR and, when they refuse, a
+\fBreason\fR string.
 .br
 Examples:
 .RS
