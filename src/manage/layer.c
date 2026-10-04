@@ -8,6 +8,7 @@
 #include "mango/input/pointer.h"
 #include "mango/ipc/ipc.h"
 #include "mango/layout/arrange.h"
+#include "mango/layout/card.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
 #include <scenefx/types/wlr_scene.h>
@@ -443,6 +444,7 @@ void handle_popup_destroy(struct wl_listener *listener, void *data) {
 		wl_list_remove(&popup->commit.link);
 		popup->commit.notify = NULL;
 	}
+	card_popup_destroy(popup);
 	if (server.selected_monitor && server.selected_monitor->sel)
 		client_focus(server.selected_monitor->sel, 1);
 	free(popup);
@@ -464,12 +466,13 @@ void handle_popup_commit(struct wl_listener *listener, void *data) {
 		goto cleanup_popup_commit;
 	}
 
-	wlr_scene_node_raise_to_top(wlr_popup->parent->data);
-
-	wlr_popup->base->surface->data =
-		wlr_scene_xdg_surface_create(wlr_popup->parent->data, wlr_popup->base);
-
 	popup->wlr_popup = wlr_popup;
+
+	if (!card_popup_create(popup)) {
+		wlr_scene_node_raise_to_top(wlr_popup->parent->data);
+		wlr_popup->base->surface->data = wlr_scene_xdg_surface_create(
+			wlr_popup->parent->data, wlr_popup->base);
+	}
 
 	should_destroy = popup_unconstrain(popup);
 

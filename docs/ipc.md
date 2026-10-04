@@ -83,3 +83,39 @@ mmsg dispatch exchange_client,left client,375
 # operate current client
 mmsg dispatch exchange_client,left
 ````
+
+The reply is `{"success":true}`, or `{"error":"unknown function"}` / `{"error":"no client found"}`. Dispatches that report their effect, such as the stage dock dispatches, add `changed` and, when they refuse, `reason`:
+
+```json
+{"success":true,"changed":false,"reason":"not-docked"}
+```
+
+### Stage Layout
+
+The [Stage layout](/docs/window-management/layouts#stage-layout) adds three fields to every client object (`get client`, `get all-clients`, `watch client`, `watch all-clients`):
+
+| Field | Value |
+| :--- | :--- |
+| `is_staged` | `true` while the window is a stage card or dock. |
+| `stage_dock` | `null`, or `{"edge":"left\|right","tier":"mini\|full","y":<int>}` while docked. `y` is the dock's center in pixels from the top of the client's monitor. |
+| `stage_dock_preview` | `null`, or the dock a release would make right now while a card is dragged near an edge: the same fields plus `"monitor":"<output name>"`, since the drop can land on another monitor. Always `null` while docked. |
+
+mango does not draw docks; a shell draws them from these fields. Changes to them push an update to `watch client <id>` and `watch all-clients`. After an undock, both streams receive the window's restored box with no further input needed.
+
+Dock dispatch replies:
+
+| Dispatch | `changed` | `reason` when refused |
+| :--- | :--- | :--- |
+| `stage_dock,left\|right\|nearest` | `true` when it docked or changed edge; `false` without a reason when already docked there, or docked and `nearest` was asked | `bad-edge` (other or missing edge), `no-client`, `not-staged` (not a card on a Stage layout monitor) |
+| `stage_undock` | `true` when it undocked | `no-client`, `not-docked` |
+| `stage_dock_toggle` | as `stage_undock` when docked, else as `stage_dock,nearest` | as those |
+| `stage_dock_move,<y>` | `true` when `y` (clamped to the monitor height) differs; `false` without a reason when unchanged | `no-client` (no `client,<id>` given), `not-docked` |
+
+`stage_flip` replies only `{"success":true}`.
+
+```bash
+# Dock client 375 on the left edge, then move it 300 pixels down from the top
+mmsg dispatch stage_dock,left client,375
+mmsg dispatch stage_dock_move,300 client,375
+mmsg dispatch stage_undock client,375
+```
