@@ -47,6 +47,11 @@ typedef struct Popup {
 	struct wl_listener destroy;
 	struct wl_listener commit;
 	struct wl_listener reposition;
+	/* Direct popups of a card client, on their own carrier node. */
+	Client *card_client;
+	struct wlr_scene_tree *card_carrier;
+	struct wl_list card_link;
+	struct wl_listener card_commit;
 } Popup;
 
 void arrange_layer(Monitor *m, struct wl_list *list,

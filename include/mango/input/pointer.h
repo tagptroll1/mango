@@ -69,6 +69,7 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 							double dx, double dy, double dx_unaccel,
 							double dy_unaccel);
 void handle_cursor_motion(struct wl_listener *listener, void *data);
+// sx/sy are surface-local; callers own any card or Xwayland conversion.
 void pointer_focus(Client *c, struct wlr_surface *surface, double sx, double sy,
 				   uint32_t time);
 void handle_request_start_drag(struct wl_listener *listener, void *data);
