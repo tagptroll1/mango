@@ -76,6 +76,7 @@ void stage_drag_motion(Client *c, uint32_t time) { abort(); }
 Client *stage_tile_at_cursor(Monitor *m, Client *skip) { abort(); }
 bool is_stage_layout(Monitor *m) { return false; }
 bool is_scroller_layout(Monitor *m) { return false; }
+bool is_overcircle_mode(const Monitor *m) { return false; }
 void client_set_drop_area(Client *c) { abort(); }
 void resize(Client *c, struct wlr_box geo, ResizeOpts opts) { abort(); }
 void resize_tile_client(Client *c, bool isdrag, int32_t x, int32_t y,
@@ -85,7 +86,8 @@ void resize_tile_client(Client *c, bool isdrag, int32_t x, int32_t y,
 bool stage_begin_move(Client *c, double x, double y) { abort(); }
 void client_set_floating(Client *c, int32_t floating) { abort(); }
 void exit_scroller_stack(Client *c) { abort(); }
-void set_size_per(Monitor *m, Client *c) { abort(); }
+void set_size_per(Monitor *m, Client *c, bool reset_proportion) { abort(); }
+uint32_t drag_refresh_interval_ms(const Monitor *m) { abort(); }
 Client *client_group_active(Client *c) { abort(); }
 bool client_group_leave(Client *tc) { abort(); }
 bool client_is_group_member(const Client *c) { abort(); }
