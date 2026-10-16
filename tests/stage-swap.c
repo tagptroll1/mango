@@ -35,6 +35,8 @@ int32_t client_is_x11(Client *c) { return c->type == X11; }
 uint32_t get_mon_curtag(const Monitor *m) { return 0; }
 Monitor *monitor_at_point(double x, double y) { return &mon; }
 void arrange(Monitor *m, bool want_animation, bool from_view) {}
+/* One frame at the 60 Hz fallback refresh. */
+uint32_t drag_refresh_interval_ms(const Monitor *m) { return 16; }
 void client_set_tiled(Client *c, uint32_t edges) {}
 void client_pending_minimized_state(Client *c, int32_t isminimized) {}
 void client_update_visibility(Client *c) {}
