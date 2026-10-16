@@ -45,6 +45,8 @@ Monitor *monitor_at_point(double x, double y) {
 	return x < mon.m.x + mon.m.width ? &mon : &other;
 }
 void arrange(Monitor *m, bool want_animation, bool from_view) { arranges++; }
+/* One frame at the 60 Hz fallback refresh. */
+uint32_t drag_refresh_interval_ms(const Monitor *m) { return 16; }
 void printstatus(uint32_t mask) { notifies++; }
 void ipc_notify_client(Client *c) { notifies++; }
 void unminimize(Client *c) { c->isminimized = 0; }
