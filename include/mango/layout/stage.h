@@ -6,9 +6,9 @@
 #include <stdint.h>
 #include <wlr/util/box.h>
 
-// Stage layout: a square in the middle of the monitor tiles up to four windows;
-// everything else is stashed on the sides as live, scaled-down cards that
-// shrink the further out they sit.
+// Stage layout: a full-height box in the middle of the monitor tiles up to
+// four windows; everything else is stashed on the sides as live, scaled-down
+// cards that shrink the further out they sit.
 
 // Bounds stage_shake_flips; the shake history is a fixed array.
 #define STAGE_SHAKE_FLIPS_MAX 8

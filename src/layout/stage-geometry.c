@@ -8,12 +8,13 @@ static int32_t stage_side_room(const struct stage_frame *f) {
 		   MANGO_MAX(f->gap_in, f->gap_out_h);
 }
 
-// Full height and square where the output allows, narrowed so each side keeps
-// room for at least one floor-sized card.
+// Full height and aspect times the output height wide where the output allows,
+// narrowed so each side keeps room for at least one floor-sized card.
 struct wlr_box stage_center_box(const struct stage_frame *f) {
 	const struct wlr_box *u = &f->usable;
 	int32_t room = stage_side_room(f);
-	int32_t side = MANGO_MAX(1, MANGO_MIN(f->mon.height, u->width - 2 * room));
+	int32_t want = (int32_t)roundf(f->mon.height * f->aspect);
+	int32_t side = MANGO_MAX(1, MANGO_MIN(want, u->width - 2 * room));
 	int32_t x = f->mon.x + (f->mon.width - side) / 2;
 	x = MANGO_MIN(x, u->x + u->width - room - side);
 	x = MANGO_MAX(x, u->x + MANGO_MIN(room, (u->width - side) / 2));
@@ -55,7 +56,7 @@ float stage_scale_of(const struct stage_frame *f, struct stage_card k,
 		t = (x - (s.x + s.width)) / (double)(m->x + m->width - (s.x + s.width));
 	t = MANGO_MAX(0.0, MANGO_MIN(1.0, t));
 	// Under 1 shrinks sooner near the center, over 1 holds size longer. A
-	// power curve would jump at the square's edge, so warp with a finite slope
+	// power curve would jump at the stage's edge, so warp with a finite slope
 	// and smoothstep so the shrink eases in and out.
 	double c = f->scale_curve;
 	t = t / (t + c * (1.0 - t));
@@ -108,7 +109,7 @@ struct wlr_box stage_box_at(struct stage_card k, double cx, double cy,
 	};
 }
 
-// Box centered on cx, cy, or moved beside the center square when that would
+// Box centered on cx, cy, or moved beside the stage when that would
 // cover it. A side too narrow for the box leaves it to stage_clamp.
 struct wlr_box stage_box_beside(const struct stage_frame *f,
 								struct stage_card k, double cx, double cy) {
@@ -125,7 +126,7 @@ struct wlr_box stage_box_beside(const struct stage_frame *f,
 	return b;
 }
 
-// Boxes for a column of k stashed cards against the square's edge, one slot
+// Boxes for a column of k stashed cards against the stage's edge, one slot
 // each, top to bottom.
 void stage_column_boxes(const struct stage_frame *f,
 						const struct stage_card *cards, int32_t k, bool left,
@@ -173,7 +174,7 @@ void stage_column_boxes(const struct stage_frame *f,
 	}
 }
 
-// Box against the square's edge on one side, at y or the side's top when y
+// Box against the stage's edge on one side, at y or the side's top when y
 // is above it or the card would run off the bottom.
 struct wlr_box stage_free_box(const struct stage_frame *f, struct stage_card k,
 							  bool left, int32_t y) {

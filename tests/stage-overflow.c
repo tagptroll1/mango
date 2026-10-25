@@ -38,6 +38,7 @@ static void check(bool ok, const char *name, const char *detail) {
 
 static void setup(int32_t w, int32_t h, bool gaps) {
 	config = (Config){
+		.stage_aspect = 1.0f,
 		.stage_scale_max = 0.8f,
 		.stage_scale_min = 0.6f,
 		.stage_scale_curve = 1.0f,

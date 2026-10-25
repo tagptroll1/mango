@@ -26,7 +26,7 @@ struct stage_frame {
 	int32_t borderpx;
 	// Tunables, documented under Stage Layout in
 	// docs/window-management/layouts.md.
-	float scale_max, scale_min, scale_curve;
+	float aspect, scale_max, scale_min, scale_curve;
 	int32_t shrink_zone, dock_tiny, dock_zone, dock_mini_zone;
 	float overview_dock_ratio;
 	int32_t overview_gap_in, overview_gap_out;
