@@ -35,6 +35,7 @@ struct stage_frame stage_frame_of(Monitor *m) {
 		.split_y = m->pertag->stage_split_y[tag],
 		.flip = m->pertag->stage_flip[tag],
 		.borderpx = (int32_t)config.borderpx,
+		.aspect = config.stage_aspect,
 		.scale_max = config.stage_scale_max,
 		.scale_min = config.stage_scale_min,
 		.scale_curve = config.stage_scale_curve,
@@ -223,7 +224,7 @@ int32_t stage_center_count(Monitor *m, Client *skip) {
 }
 
 // Side a stashed window belongs to: where it sits, or the emptier side while it
-// is still inside the center square.
+// is still inside the stage.
 static bool stage_on_left(const struct stage_frame *f, Client *c, int32_t nleft,
 						  int32_t nright) {
 	struct wlr_box s = stage_center_box(f);
@@ -288,7 +289,7 @@ void stage_align_sides(Monitor *m, Client *skip) {
 }
 
 // Stashes a window without disturbing the ones already on the sides: below the
-// last one on the emptier side, against the square's edge.
+// last one on the emptier side, against the stage's edge.
 void stage_stash_free(Monitor *m, Client *c) {
 	struct stage_frame f = stage_frame_of(m);
 	struct wlr_box s = stage_center_box(&f);

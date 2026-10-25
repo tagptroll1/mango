@@ -73,6 +73,7 @@ static void check(bool ok, const char *name, const char *detail) {
 
 static void setup(bool gaps, float split_x, float split_y, bool flip) {
 	config = (Config){
+		.stage_aspect = 1.0f,
 		.stage_scale_max = 0.8f,
 		.stage_scale_min = 0.6f,
 		.stage_scale_curve = 1.0f,
