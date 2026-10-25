@@ -180,6 +180,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		config->edge_scroller_pointer_focus = atoi(value);
 	} else if (strcmp(key, "edge_scroller_focus_allow_speed") == 0) {
 		config->edge_scroller_focus_allow_speed = atof(value);
+	} else if (strcmp(key, "stage_aspect") == 0) {
+		config->stage_aspect = atof(value);
 	} else if (strcmp(key, "stage_scale_max") == 0) {
 		config->stage_scale_max = atof(value);
 	} else if (strcmp(key, "stage_scale_min") == 0) {
@@ -2468,6 +2470,7 @@ void set_value_default() {
 	config.scroller_prefer_overspread = 1;
 	config.edge_scroller_pointer_focus = 1;
 	config.edge_scroller_focus_allow_speed = 0.0f;
+	config.stage_aspect = 1.0f;
 	config.stage_scale_max = 0.8f;
 	config.stage_scale_min = 0.6f;
 	config.stage_scale_curve = 1.0f;
@@ -2799,6 +2802,7 @@ void override_config(void) {
 	config.edge_scroller_focus_allow_speed =
 		CLAMP_FLOAT(config.edge_scroller_focus_allow_speed, 0.0f, 1000.0f);
 	// Stage falloff and shrink math divide by these gaps, so keep them ordered.
+	config.stage_aspect = CLAMP_FLOAT(config.stage_aspect, 0.5f, 4.0f);
 	config.stage_scale_max = CLAMP_FLOAT(config.stage_scale_max, 0.05f, 1.0f);
 	config.stage_scale_min =
 		CLAMP_FLOAT(config.stage_scale_min, 0.05f, config.stage_scale_max);

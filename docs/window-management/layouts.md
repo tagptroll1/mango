@@ -161,11 +161,11 @@ deck_tab_mode=1
 
 ## Stage Layout
 
-The Stage layout tiles up to four windows in a square in the middle of the monitor, the *stage*. Every other window becomes a *card* on the sides: the live window drawn scaled down, shrinking the further it sits from the stage.
+The Stage layout tiles up to four windows in a full-height box in the middle of the monitor, the *stage*. Every other window becomes a *card* on the sides: the live window drawn scaled down, shrinking the further it sits from the stage.
 
 ### The Stage
 
-- The stage is always the full height of the work area. It is square where the output allows. On portrait, square, or narrow outputs it is made narrower so each side keeps room for at least one card of `stage_dock_tiny` plus gaps and borders. Cards never go above or below the stage.
+- The stage is always the full height of the work area. It is `stage_aspect` times the output height wide where the output allows, square at the default. On portrait, square, or narrow outputs it is made narrower so each side keeps room for at least one card of `stage_dock_tiny` plus gaps and borders. Cards never go above or below the stage.
 - The first four tiled windows, in tiling order, share the stage. The 5th and later tiled windows become cards on the emptier side, below the last card there.
 - `stage_flip` switches between side-by-side and stacked tiles. A mouse resize (`moveresize,curresize`) or `resizewin` on a stage tile moves the dividers, which stay between 10% and 90% of the stage.
 
@@ -214,6 +214,7 @@ All values are clamped when the config is loaded. Some limits depend on other ke
 
 | Setting | Default | Range | Description |
 | :--- | :--- | :--- | :--- |
+| `stage_aspect` | `1.0` | `0.5`–`4.0` | Stage width as a share of the output height; `1.5` is 3:2. |
 | `stage_scale_max` | `0.8` | `0.05`–`1.0` | Card scale next to the stage. |
 | `stage_scale_min` | `0.6` | `0.05`–`stage_scale_max` | Card scale at the output edge, before the edge shrink. |
 | `stage_scale_curve` | `1.0` | `0.1`–`10.0` | Under `1` cards shrink sooner after leaving the stage, over `1` they keep their size longer. |

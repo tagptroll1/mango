@@ -341,6 +341,7 @@ typedef struct {
 	int32_t scroller_prefer_overspread;
 	int32_t edge_scroller_pointer_focus;
 	double edge_scroller_focus_allow_speed;
+	float stage_aspect;
 	float stage_scale_max;
 	float stage_scale_min;
 	float stage_scale_curve;
