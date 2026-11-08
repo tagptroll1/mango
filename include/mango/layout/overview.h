@@ -5,7 +5,6 @@
 #include <scenefx/types/fx/clipped_region.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <wlr/util/box.h>
 
 typedef struct {
 	float x, y, w, h;
@@ -26,7 +25,6 @@ int compare_layout_items(const void *a, const void *b);
 bool try_place(OvPlacedRect *placed, int placed_cnt, float w, float h,
 			   float gap, float avail_w, float avail_h, OvPlacedRect *out,
 			   OvPoint *cands, OvPoint *feas);
-// Both lay out the overview cards in area, a part of m's work area.
 void overview_scale(Monitor *m, struct wlr_box area);
 // Overview layout: focused window centered (about half screen width), remaining
 // windows split on both sides.

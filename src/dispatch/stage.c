@@ -1,10 +1,12 @@
 #include "mango/dispatch/stage.h"
 #include "mango/common/server.h"
 #include "mango/dispatch/bind.h"
-#include "mango/ipc/ipc.h"
+#include "mango/ipc/stage.h"
 #include "mango/layout/stage.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
+#include <stdlib.h>
+#include <string.h>
 
 static struct ipc_dispatch_result stage_ipc_result(enum stage_result r) {
 	switch (r) {
@@ -55,7 +57,7 @@ int32_t stage_undock(const Arg *arg) {
 int32_t stage_dock_toggle(const Arg *arg) {
 	Client *c = stage_dispatch_client(arg);
 	ipc_dispatch_result = stage_ipc_result(
-		c && c->stage_docked ? stage_undock_window(c)
+		c && c->stage.docked ? stage_undock_window(c)
 							 : stage_dock_window(c, STAGE_DOCK_NEAREST));
 	return 0;
 }
@@ -70,4 +72,24 @@ int32_t stage_dock_move(const Arg *arg) {
 int32_t stage_flip_toggle(const Arg *arg) {
 	stage_flip(server.selected_monitor);
 	return 0;
+}
+
+FuncType stage_parse_func(const char *name, Arg *arg, const char *value) {
+	if (strcmp(name, "stage_dock") == 0) {
+		arg->i = strcmp(value, "left") == 0		 ? LEFT
+				 : strcmp(value, "right") == 0	 ? RIGHT
+				 : strcmp(value, "nearest") == 0 ? UNDIR
+												 : -1;
+		return stage_dock;
+	} else if (strcmp(name, "stage_undock") == 0) {
+		return stage_undock;
+	} else if (strcmp(name, "stage_dock_toggle") == 0) {
+		return stage_dock_toggle;
+	} else if (strcmp(name, "stage_dock_move") == 0) {
+		arg->i = atoi(value);
+		return stage_dock_move;
+	} else if (strcmp(name, "stage_flip") == 0) {
+		return stage_flip_toggle;
+	}
+	return NULL;
 }

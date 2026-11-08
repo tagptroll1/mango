@@ -3,7 +3,6 @@
 #include "mango/common/server.h"
 #include "mango/common/util.h"
 #include "mango/layout/layout.h"
-#include "mango/layout/stage.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
 #include "mango/manage/tab.h"

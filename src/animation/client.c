@@ -3,7 +3,6 @@
 #include "mango/common/server.h"
 #include "mango/common/util.h"
 #include "mango/draw/title-message-bar.h"
-#include "mango/layout/card.h"
 #include "mango/layout/dwindle.h"
 #include "mango/layout/layout.h"
 #include "mango/manage/client.h"
@@ -339,10 +338,8 @@ void client_draw_shadow(Client *c, struct ivec2 offsets) {
 	if (c->iskilling || !client_surface(c)->mapped || c->no_shadow)
 		return;
 
-	// Staged cards float only to leave tiling; the shadow marks windows that
-	// sit above the layout.
 	if (!config.shadows || c->isfullscreen ||
-		((!c->isfloating || c->isstaged) && config.shadow_only_floating)) {
+		((!c->isfloating || c->stage.staged) && config.shadow_only_floating)) {
 		if (c->shadow->node.enabled)
 			wlr_scene_node_set_enabled(&c->shadow->node, false);
 		return;
@@ -1549,7 +1546,7 @@ void resize(Client *c, struct wlr_box geo, ResizeOpts opts) {
 	}
 
 	if (!c->no_size_hint && !c->ismaximizescreen && !c->isfullscreen &&
-		c->isfloating && !c->isstaged) {
+		c->isfloating && !c->stage.staged) {
 		int32_t anchor_right = c->geom.x + c->geom.width;
 		int32_t anchor_bottom = c->geom.y + c->geom.height;
 		client_set_size_bound(c);
@@ -1626,8 +1623,6 @@ void resize(Client *c, struct wlr_box geo, ResizeOpts opts) {
 			c->geom;
 		wlr_scene_node_set_position(&c->scene->node, c->geom.x, c->geom.y);
 
-		// Stashed windows show a scaled card; rescale it with the border so
-		// the content does not wait for the client's next commit.
 		if (c->card.tree) {
 			stage_drag_morph(c);
 			client_set_clip(c, 1.0f);
@@ -1896,8 +1891,6 @@ bool client_draw_frame(Client *c) {
 		return client_set_focus_opacity(c);
 	}
 
-	// A grab gets no motion while the pointer rests, so the pickup ease is
-	// driven from frames.
 	if (stage_drag_morph(c)) {
 		client_set_clip(c, 1.0f);
 		client_set_focus_opacity(c);

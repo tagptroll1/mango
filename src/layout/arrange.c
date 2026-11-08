@@ -1276,9 +1276,7 @@ void tag_gather_reset_slot(Monitor *m, uint32_t tag) {
 	m->pertag->open_as_floating[tag] = 0;
 	m->pertag->dwindle_root[tag] = NULL;
 	m->pertag->scroller_state[tag] = NULL;
-	m->pertag->stage_flip[tag] = 0;
-	m->pertag->stage_split_x[tag] = 0.0f;
-	m->pertag->stage_split_y[tag] = 0.0f;
+	m->pertag->stage[tag] = (struct stage_tag){0};
 
 	for (i = 0; i < config.tag_rules_count; i++) {
 		const ConfigTagRule *tr = &config.tag_rules[i];
@@ -1307,9 +1305,7 @@ void tag_gather_move_pertag(Monitor *m, uint32_t dst, uint32_t src) {
 	m->pertag->config_ltidxs[dst] = m->pertag->config_ltidxs[src];
 	m->pertag->ltidxs[dst] = m->pertag->ltidxs[src];
 	m->pertag->scroller_state[dst] = m->pertag->scroller_state[src];
-	m->pertag->stage_flip[dst] = m->pertag->stage_flip[src];
-	m->pertag->stage_split_x[dst] = m->pertag->stage_split_x[src];
-	m->pertag->stage_split_y[dst] = m->pertag->stage_split_y[src];
+	m->pertag->stage[dst] = m->pertag->stage[src];
 	tag_gather_reset_slot(m, src);
 }
 

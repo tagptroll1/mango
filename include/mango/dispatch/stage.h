@@ -2,6 +2,7 @@
 #define __DISPATCH_STAGE_H__ 1
 
 #include "mango/common/types.h"
+#include "mango/config/parse.h"
 #include <stdint.h>
 
 // Stage dispatches. Each reports its effect in ipc_dispatch_result; the return
@@ -16,5 +17,8 @@ int32_t stage_dock_toggle(const Arg *arg);
 // arg->tc's dock to arg->i along its edge, for the shell's tab drag.
 int32_t stage_dock_move(const Arg *arg);
 int32_t stage_flip_toggle(const Arg *arg);
+
+// Bind name and argument for the stage dispatches; NULL for other names.
+FuncType stage_parse_func(const char *name, Arg *arg, const char *value);
 
 #endif

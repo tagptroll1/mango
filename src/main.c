@@ -354,7 +354,6 @@ void unset_activation_env(void) {
 	 * on the child) deadlocks when mango itself belongs to the systemd user
 	 * session, because stopping graphical-session.target then waits for mango
 	 * to exit while mango waits for the command to finish. */
-	/* Portal activation during teardown must not cancel the stop job. */
 	char *cmd0 = string_printf(
 		"systemctl --user --no-block --job-mode=replace-irreversibly stop "
 		"graphical-session.target");

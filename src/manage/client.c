@@ -13,7 +13,6 @@
 #include "mango/input/pointer.h"
 #include "mango/ipc/ipc.h"
 #include "mango/layout/arrange.h"
-#include "mango/layout/card.h"
 #include "mango/layout/dwindle.h"
 #include "mango/layout/layout.h"
 #include "mango/layout/scroll.h"
@@ -2184,7 +2183,8 @@ void init_client_properties(Client *c) {
 	c->allow_shortcuts_inhibit = SHORTCUTS_INHIBIT_ENABLE;
 	c->idleinhibit_when_focus = 0;
 	c->vrr_only_fullscreen = 0;
-	/* No-op without a card; either way the no-card state follows. */
+	/* On unmap while in overview, destroy the card tree first to avoid a leak.
+	 */
 	card_destroy(c);
 	c->overview_member = false;
 	c->force_render = 0;
@@ -2449,9 +2449,6 @@ void handle_client_map(struct wl_listener *listener, void *data) {
 	// set border color
 	client_update_border_color(c);
 
-	// Joins overview like the clients backed up on entry, with the same
-	// exclusions as the exit loop so its restore runs. A swallow already
-	// inherited membership.
 	if (c->mon && c->mon->isoverview && !c->overview_member && !c->isunglobal &&
 		!(c->tags & TAG0_MASK)) {
 		overview_backup(c);
@@ -2533,8 +2530,7 @@ void handle_client_commit(struct wl_listener *listener, void *data) {
 		c->configure_serial <= c->surface.xdg->current.configure_serial)
 		c->configure_serial = 0;
 
-	/* A stashed client that settled on another size (min size) keeps it. */
-	if (c->isstaged && !c->configure_serial)
+	if (c->stage.staged && !c->configure_serial)
 		stage_adopt_size(c, c->surface.xdg->geometry.width,
 						 c->surface.xdg->geometry.height);
 
@@ -3990,7 +3986,6 @@ void client_replace(Client *c, Client *w, bool is_group_change_member,
 	/* If the old window is in overview, destroy its card tree. */
 	card_destroy(w);
 
-	// c takes over w's overview slot, so exit restores w's saved state.
 	c->overview_member = w->overview_member;
 	c->overview_backup_bw = w->overview_backup_bw;
 	c->overview_isfloatingbak = w->overview_isfloatingbak;
@@ -4308,7 +4303,7 @@ bool client_should_visible(Client *c) {
 	if (c->is_clip_to_hide)
 		return false;
 
-	if (c->stage_docked &&
+	if (c->stage.docked &&
 		!(c->mon && c->mon->isoverview && c->overview_member &&
 		  (c->tags & c->mon->tagset[c->mon->seltags])))
 		return false;
@@ -4958,7 +4953,7 @@ void handle_xwayland_surface_request_configure(struct wl_listener *listener,
 	 */
 	c->xwl_req_valid = false;
 
-	if (c->isstaged) {
+	if (c->stage.staged) {
 		stage_adopt_size(c, new_geo.width, new_geo.height);
 		return;
 	}

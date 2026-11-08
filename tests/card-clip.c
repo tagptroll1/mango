@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/types/wlr_subcompositor.h>
+#include <wlr/util/transform.h>
 
 struct test_surface {
 	struct wlr_surface surface;
@@ -27,6 +28,33 @@ void client_get_clip(Client *c, struct wlr_box *clip) {
 	*clip = c->surface.xdg->geometry;
 }
 void client_get_geometry(Client *c, struct wlr_box *geom) { *geom = c->geom; }
+/* Same as src/manage/client.c; the source box is part of what is tested. */
+void client_surface_get_source_box(struct wlr_surface *surface,
+								   const struct wlr_fbox *surface_box,
+								   struct wlr_fbox *source_box) {
+	const struct wlr_surface_state *state = &surface->current;
+	wlr_surface_get_buffer_source_box(surface, source_box);
+	if (wlr_fbox_empty(surface_box) || state->width <= 0 ||
+		state->height <= 0) {
+		return;
+	}
+
+	int buffer_width = state->buffer_width;
+	int buffer_height = state->buffer_height;
+	wlr_fbox_transform(source_box, source_box, state->transform, buffer_width,
+					   buffer_height);
+	wlr_output_transform_coords(state->transform, &buffer_width,
+								&buffer_height);
+
+	source_box->x += surface_box->x * source_box->width / state->width;
+	source_box->y += surface_box->y * source_box->height / state->height;
+	source_box->width *= surface_box->width / state->width;
+	source_box->height *= surface_box->height / state->height;
+
+	wlr_fbox_transform(source_box, source_box,
+					   wlr_output_transform_invert(state->transform),
+					   buffer_width, buffer_height);
+}
 /* Records what the real visibility update would read: a card hides the real
  * surface tree. */
 static int visibility_updates;

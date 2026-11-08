@@ -235,10 +235,13 @@ void card_layout(Client *c) {
 		 * Map each surface's own (0,0) into the card, then clip the result to
 		 * the card and monitor. The source offset is derived from that
 		 * intersection, so an xdg geometry origin outside the root buffer never
-		 * becomes a negative buffer coordinate.
+		 * becomes a negative buffer coordinate. The source offset comes from
+		 * the unrounded origin, or a fractional offset shifts the content.
 		 */
-		int px = (int)((entry->sx - clip.x) * scale_x);
-		int py = (int)((entry->sy - clip.y) * scale_y);
+		double fx = (entry->sx - clip.x) * scale_x;
+		double fy = (entry->sy - clip.y) * scale_y;
+		int px = (int)floor(fx);
+		int py = (int)floor(fy);
 		int dw = (int)(lw * scale_x);
 		int dh = (int)(lh * scale_y);
 
@@ -253,8 +256,8 @@ void card_layout(Client *c) {
 			continue;
 		}
 
-		double ox = (double)(cx0 - px) / scale_x;
-		double oy = (double)(cy0 - py) / scale_y;
+		double ox = fmax(0.0, (cx0 - fx) / scale_x);
+		double oy = fmax(0.0, (cy0 - fy) / scale_y);
 		struct wlr_fbox surface_box = {
 			.x = ox,
 			.y = oy,
@@ -310,7 +313,7 @@ void card_destroy(Client *c) {
 
 	// Their carriers are placed from the card mapping, gone after this.
 	Popup *popup, *ptmp;
-	wl_list_for_each_safe(popup, ptmp, &c->card.popups, card_link)
+	wl_list_for_each_safe(popup, ptmp, &c->card.popups, card.link)
 		wlr_xdg_popup_destroy(popup->wlr_popup);
 
 	struct card_surface *entry, *tmp;
@@ -323,9 +326,9 @@ void card_destroy(Client *c) {
 }
 
 static void card_popup_handle_commit(struct wl_listener *listener, void *data) {
-	Popup *popup = wl_container_of(listener, popup, card_commit);
-	if (popup->card_client)
-		card_layout_popups(popup->card_client);
+	Popup *popup = wl_container_of(listener, popup, card.commit);
+	if (popup->card.client)
+		card_layout_popups(popup->card.client);
 }
 
 // Parents direct popups of a card client to their own node so they escape
@@ -339,25 +342,25 @@ bool card_popup_create(Popup *popup) {
 		wlr_popup->parent != client_surface(c))
 		return false;
 
-	popup->card_client = c;
-	popup->card_carrier = wlr_scene_tree_create(c->scene);
+	popup->card.client = c;
+	popup->card.carrier = wlr_scene_tree_create(c->scene);
 	wlr_popup->base->surface->data =
-		wlr_scene_xdg_surface_create(popup->card_carrier, wlr_popup->base);
-	wl_list_insert(&c->card.popups, &popup->card_link);
-	popup->card_commit.notify = card_popup_handle_commit;
+		wlr_scene_xdg_surface_create(popup->card.carrier, wlr_popup->base);
+	wl_list_insert(&c->card.popups, &popup->card.link);
+	popup->card.commit.notify = card_popup_handle_commit;
 	wl_signal_add(&wlr_popup->base->surface->events.commit,
-				  &popup->card_commit);
+				  &popup->card.commit);
 	card_layout_popups(c);
 	return true;
 }
 
 void card_popup_destroy(Popup *popup) {
-	if (!popup->card_client)
+	if (!popup->card.client)
 		return;
-	wl_list_remove(&popup->card_link);
-	wl_list_remove(&popup->card_commit.link);
-	wlr_scene_node_destroy(&popup->card_carrier->node);
-	popup->card_client = NULL;
+	wl_list_remove(&popup->card.link);
+	wl_list_remove(&popup->card.commit.link);
+	wlr_scene_node_destroy(&popup->card.carrier->node);
+	popup->card.client = NULL;
 }
 
 static void card_layout_popups(Client *c) {
@@ -365,7 +368,7 @@ static void card_layout_popups(Client *c) {
 		return;
 
 	Popup *popup;
-	wl_list_for_each(popup, &c->card.popups, card_link) {
+	wl_list_for_each(popup, &c->card.popups, card.link) {
 		struct wlr_box g = popup->wlr_popup->current.geometry;
 		// Popup geometry already excludes the parent's surface margins.
 		int32_t ax = (int32_t)c->bw + (int32_t)roundf(g.x * c->card.scale_x);
@@ -385,8 +388,8 @@ static void card_layout_popups(Client *c) {
 			ay += u->y - ly;
 
 		// wlroots places the popup tree at g inside the carrier.
-		wlr_scene_node_set_position(&popup->card_carrier->node, ax - g.x,
+		wlr_scene_node_set_position(&popup->card.carrier->node, ax - g.x,
 									ay - g.y);
-		wlr_scene_node_raise_to_top(&popup->card_carrier->node);
+		wlr_scene_node_raise_to_top(&popup->card.carrier->node);
 	}
 }

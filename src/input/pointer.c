@@ -11,7 +11,6 @@
 #include "mango/input/trackpad.h"
 #include "mango/ipc/ipc.h"
 #include "mango/layout/arrange.h"
-#include "mango/layout/card.h"
 #include "mango/layout/dwindle.h"
 #include "mango/layout/layout.h"
 #include "mango/layout/scroll.h"
@@ -1011,14 +1010,11 @@ bool pointer_begin_move_resize(Client *gc, uint32_t mode, double x, double y,
 	server.grab_client = gc;
 	server.grab_is_border_resize = edge != 0;
 
-	if (mode == CurMove && stage_begin_move(gc, x, y)) {
-		/* Stage stashes the window and sizes it itself. */
-	} else if (gc->isfloating == 0 && mode == CurMove) {
+	if (mode == CurMove && !stage_begin_move(gc, x, y) && gc->isfloating == 0)
 		client_begin_drag_float(gc);
-	}
 
 	if (gc->drag_to_tile && config.drag_tile_to_tile &&
-		config.drag_tile_small && !gc->isstaged) {
+		config.drag_tile_small && !gc->stage.staged) {
 		gc->geom.x = (int32_t)round(x) - 150;
 		gc->geom.y = (int32_t)round(y) - 150;
 		gc->geom.width = 300;
@@ -1136,7 +1132,6 @@ void pointer_end_grab_client(bool follow_pointer) {
 	server.grab_client = NULL;
 	server.start_drag_window = false;
 	if (moving && stage_drop(gc)) {
-		/* Placed by the stage layout. */
 	} else if (gc->drag_to_tile && config.drag_tile_to_tile) {
 		pointer_place_drag_tile(gc);
 		gc->float_geom = gc->drag_tile_float_backup_geom;
@@ -1418,7 +1413,6 @@ void pointer_process_motion(uint32_t time, struct wlr_input_device *device,
 			   speed < config.edge_scroller_focus_allow_speed) &&
 			  c && c->mon && ISSCROLLTILED(c) && is_scroller_layout(c->mon) &&
 			  !INSIDEMON(c))) {
-			// Card mapping already includes X11 scaling.
 			double scale = surface_coords ? 1.0 : pointer_surface_scale(c);
 			pointer_focus(c, surface, sx * scale, sy * scale, time);
 		}

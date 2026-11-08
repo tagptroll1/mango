@@ -31,7 +31,7 @@ static int nevents;
 static void record(enum stream stream) {
 	if (nevents < 64)
 		events[nevents++] = (struct event){
-			stream, client.geom, client.stage_docked, client.isminimized};
+			stream, client.geom, client.stage.docked, client.isminimized};
 }
 
 /* The streams handle_print_status feeds for these masks. */
@@ -78,15 +78,15 @@ static void check(bool ok, const char *name, const char *detail) {
 
 static void setup(void) {
 	config = (Config){
-		.stage_aspect = 1.0f,
-		.stage_scale_max = 0.8f,
-		.stage_scale_min = 0.6f,
-		.stage_scale_curve = 1.0f,
-		.stage_shrink_zone = 100,
-		.stage_dock_tiny = 64,
-		.stage_dock_zone = 48,
-		.stage_dock_mini_zone = 8,
-		.stage_text_zoom = 1.0f,
+		.stage.aspect = 1.0f,
+		.stage.scale_max = 0.8f,
+		.stage.scale_min = 0.6f,
+		.stage.scale_curve = 1.0f,
+		.stage.shrink_zone = 100,
+		.stage.dock_tiny = 64,
+		.stage.dock_zone = 48,
+		.stage.dock_mini_zone = 8,
+		.stage.text_zoom = 1.0f,
 		.borderpx = 2,
 	};
 	server.enable_gaps = true;
@@ -149,7 +149,7 @@ static void check_streams(const char *name) {
 				 e ? e->minimized : -1, client.geom.x, client.geom.y,
 				 client.geom.width, client.geom.height);
 		check(e && wlr_box_equal(&e->geom, &client.geom) &&
-				  e->docked == client.stage_docked &&
+				  e->docked == client.stage.docked &&
 				  e->minimized == client.isminimized,
 			  label, detail);
 	}
@@ -163,11 +163,11 @@ static void check_restored(const char *name, int32_t edge) {
 			 client.geom.height, ipc_dispatch_result.changed,
 			 ipc_dispatch_result.reason ? ipc_dispatch_result.reason : "-");
 	bool at_edge = edge == STAGE_DOCK_LEFT
-					   ? abs(client.geom.x - config.stage_shrink_zone) <= 1
+					   ? abs(client.geom.x - config.stage.shrink_zone) <= 1
 					   : abs(client.geom.x + client.geom.width -
-							 (mon.m.width - config.stage_shrink_zone)) <= 1;
-	check(at_edge && !client.stage_docked && !client.isminimized &&
-			  client.isstaged && ipc_dispatch_result.changed == 1,
+							 (mon.m.width - config.stage.shrink_zone)) <= 1;
+	check(at_edge && !client.stage.docked && !client.isminimized &&
+			  client.stage.staged && ipc_dispatch_result.changed == 1,
 		  name, detail);
 	check_streams(name);
 }
@@ -196,7 +196,7 @@ int main(void) {
 	docked_at((struct wlr_box){20, 500, 324, 244}, STAGE_DOCK_LEFT);
 	pertag.ltidxs[0] = &tile_layout;
 	stage_undock(&(Arg){.tc = &client});
-	check(!client.stage_docked && !client.isminimized &&
+	check(!client.stage.docked && !client.isminimized &&
 			  ipc_dispatch_result.changed == 1,
 		  "layout changed undock", NULL);
 	check_streams("layout changed undock");

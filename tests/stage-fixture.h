@@ -10,7 +10,6 @@
 
 struct MangoServer server;
 Config config;
-struct ipc_dispatch_result ipc_dispatch_result = {-1, NULL};
 
 #define NCLIENTS 8
 static Client clients[NCLIENTS];
@@ -73,19 +72,19 @@ static void check(bool ok, const char *name, const char *detail) {
 
 static void setup(bool gaps, float split_x, float split_y, bool flip) {
 	config = (Config){
-		.stage_aspect = 1.0f,
-		.stage_scale_max = 0.8f,
-		.stage_scale_min = 0.6f,
-		.stage_scale_curve = 1.0f,
-		.stage_shrink_zone = 100,
-		.stage_dock_tiny = 64,
-		.stage_dock_zone = 48,
-		.stage_dock_mini_zone = 8,
-		.stage_overview_dock_ratio = 0.12f,
-		.stage_text_zoom = 1.0f,
-		.stage_shake_travel = 40,
-		.stage_shake_flips = 4,
-		.stage_shake_window_ms = 1000,
+		.stage.aspect = 1.0f,
+		.stage.scale_max = 0.8f,
+		.stage.scale_min = 0.6f,
+		.stage.scale_curve = 1.0f,
+		.stage.shrink_zone = 100,
+		.stage.dock_tiny = 64,
+		.stage.dock_zone = 48,
+		.stage.dock_mini_zone = 8,
+		.stage.overview_dock_ratio = 0.12f,
+		.stage.text_zoom = 1.0f,
+		.stage.shake_travel = 40,
+		.stage.shake_flips = 4,
+		.stage.shake_window_ms = 1000,
 		.overviewgappi = 5,
 		.overviewgappo = 30,
 		.borderpx = 2,
@@ -97,9 +96,9 @@ static void setup(bool gaps, float split_x, float split_y, bool flip) {
 	server.start_drag_window = false;
 	wl_list_init(&server.clients);
 	pertag = (Pertag){.ltidxs = {&stage_layout}};
-	pertag.stage_split_x[0] = split_x;
-	pertag.stage_split_y[0] = split_y;
-	pertag.stage_flip[0] = flip;
+	pertag.stage[0].split_x = split_x;
+	pertag.stage[0].split_y = split_y;
+	pertag.stage[0].flip = flip;
 	other_pertag = (Pertag){.ltidxs = {&tile_layout}};
 	mon = (Monitor){
 		.m = {0, 0, 2560, 1440},

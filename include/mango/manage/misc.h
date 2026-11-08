@@ -11,7 +11,6 @@ int32_t is_descendant_process(pid_t p, pid_t c);
 void get_layout_abbr(char *abbr, const char *full_name);
 Client *client_at_point(double x, double y);
 bool layer_ignores_focus(LayerSurface *l);
-// True marks card-mapped surface coordinates; skip X11 scaling.
 bool node_at_point(double x, double y, struct wlr_surface **psurface,
 				   Client **pc, LayerSurface **pl, MangoBarDecoration **bar,
 				   double *nx, double *ny);

@@ -31,35 +31,35 @@ struct stage_frame stage_frame_of(Monitor *m) {
 		.gap_in = gaps ? m->gappih : 0,
 		.gap_out_h = gaps ? m->gappoh : 0,
 		.gap_out_v = gaps ? m->gappov : 0,
-		.split_x = m->pertag->stage_split_x[tag],
-		.split_y = m->pertag->stage_split_y[tag],
-		.flip = m->pertag->stage_flip[tag],
+		.split_x = m->pertag->stage[tag].split_x,
+		.split_y = m->pertag->stage[tag].split_y,
+		.flip = m->pertag->stage[tag].flip,
 		.borderpx = (int32_t)config.borderpx,
-		.aspect = config.stage_aspect,
-		.scale_max = config.stage_scale_max,
-		.scale_min = config.stage_scale_min,
-		.scale_curve = config.stage_scale_curve,
-		.shrink_zone = config.stage_shrink_zone,
-		.dock_tiny = config.stage_dock_tiny,
-		.dock_zone = config.stage_dock_zone,
-		.dock_mini_zone = config.stage_dock_mini_zone,
-		.overview_dock_ratio = config.stage_overview_dock_ratio,
+		.aspect = config.stage.aspect,
+		.scale_max = config.stage.scale_max,
+		.scale_min = config.stage.scale_min,
+		.scale_curve = config.stage.scale_curve,
+		.shrink_zone = config.stage.shrink_zone,
+		.dock_tiny = config.stage.dock_tiny,
+		.dock_zone = config.stage.dock_zone,
+		.dock_mini_zone = config.stage.dock_mini_zone,
+		.overview_dock_ratio = config.stage.overview_dock_ratio,
 		.overview_gap_in = config.overviewgappi,
 		.overview_gap_out = config.overviewgappo,
 	};
 }
 
 struct stage_card stage_card_of(Client *c) {
-	return (struct stage_card){c->stage_lw, c->stage_lh, (int32_t)c->bw};
+	return (struct stage_card){c->stage.lw, c->stage.lh, (int32_t)c->bw};
 }
 
 // Configuring a stashed client smaller than its card's logical size makes the
 // card draw it that much larger, so its text stays readable off-stage.
 void stage_content_size(Client *c, int32_t *w, int32_t *h) {
-	if (c->isstaged && c->stage_lw > 0 && c->stage_lh > 0) {
-		float z = config.stage_text_zoom;
-		*w = MANGO_MAX(1, (int32_t)roundf(c->stage_lw / z));
-		*h = MANGO_MAX(1, (int32_t)roundf(c->stage_lh / z));
+	if (c->stage.staged && c->stage.lw > 0 && c->stage.lh > 0) {
+		float z = config.stage.text_zoom;
+		*w = MANGO_MAX(1, (int32_t)roundf(c->stage.lw / z));
+		*h = MANGO_MAX(1, (int32_t)roundf(c->stage.lh / z));
 		return;
 	}
 	*w = c->geom.width - 2 * (int32_t)c->bw;
@@ -67,24 +67,24 @@ void stage_content_size(Client *c, int32_t *w, int32_t *h) {
 }
 
 static float stage_current_scale(Client *c) {
-	return c->stage_scale > 0.f ? c->stage_scale : config.stage_scale_max;
+	return c->stage.scale > 0.f ? c->stage.scale : config.stage.scale_max;
 }
 
 // The box on screen is logical size times scale. Box changes that did not come
 // from a scale change (resize grabs, keyboard resizes) resize the client.
 void stage_sync_logical(Client *c) {
-	if (!c->isstaged || c->stage_scale <= 0.f)
+	if (!c->stage.staged || c->stage.scale <= 0.f)
 		return;
 	int32_t bw2 = 2 * (int32_t)c->bw;
-	float s = c->stage_scale;
+	float s = c->stage.scale;
 	// Compared on screen: at tiny scales a rounded pixel is many logical ones,
 	// and treating it as a resize would reconfigure the client mid-drag.
-	int32_t ew = (int32_t)roundf(c->stage_lw * s) + bw2;
-	int32_t eh = (int32_t)roundf(c->stage_lh * s) + bw2;
+	int32_t ew = (int32_t)roundf(c->stage.lw * s) + bw2;
+	int32_t eh = (int32_t)roundf(c->stage.lh * s) + bw2;
 	if (abs(c->geom.width - ew) > 1)
-		c->stage_lw = (int32_t)roundf((c->geom.width - bw2) / s);
+		c->stage.lw = (int32_t)roundf((c->geom.width - bw2) / s);
 	if (abs(c->geom.height - eh) > 1)
-		c->stage_lh = (int32_t)roundf((c->geom.height - bw2) / s);
+		c->stage.lh = (int32_t)roundf((c->geom.height - bw2) / s);
 }
 
 // Popups are anchored to content that is about to change scale; closing them
@@ -112,8 +112,8 @@ void stage_notify(Client *c) {
 
 // Stashes c at box, or moves it there when already stashed.
 void stage_stash(Client *c, struct wlr_box box) {
-	int32_t lw = c->stage_lw, lh = c->stage_lh;
-	if (!c->isstaged) {
+	int32_t lw = c->stage.lw, lh = c->stage.lh;
+	if (!c->stage.staged) {
 		struct wlr_box content;
 		client_get_geometry(c, &content);
 		if (content.width <= 0 || content.height <= 0)
@@ -131,11 +131,11 @@ void stage_stash(Client *c, struct wlr_box box) {
 	if (lw <= 0 || lh <= 0 || box.width <= bw2 || box.height <= bw2)
 		return;
 
-	if (!c->isstaged) {
+	if (!c->stage.staged) {
 		stage_close_popups(c);
-		c->stage_lw = lw;
-		c->stage_lh = lh;
-		c->isstaged = true;
+		c->stage.lw = lw;
+		c->stage.lh = lh;
+		c->stage.staged = true;
 		c->isfloating = 1;
 		// The stage owns it now; a scratchpad toggle would fight the card.
 		c->is_in_scratchpad = 0;
@@ -147,20 +147,20 @@ void stage_stash(Client *c, struct wlr_box box) {
 								WLR_EDGE_RIGHT);
 		card_create(c);
 	}
-	c->stage_scale = (float)(box.width - bw2) / (float)c->stage_lw;
+	c->stage.scale = (float)(box.width - bw2) / (float)c->stage.lw;
 	c->float_geom = box;
 	resize(c, box, (ResizeOpts){.interact = 0});
 }
 
 void stage_unstash(Client *c) {
-	if (!c->isstaged)
+	if (!c->stage.staged)
 		return;
 	stage_close_popups(c);
-	c->isstaged = false;
+	c->stage.staged = false;
 	c->isfloating = 0;
 	// A dock is a stashed window, so it cannot outlive the stash.
-	if (c->stage_docked) {
-		c->stage_docked = false;
+	if (c->stage.docked) {
+		c->stage.docked = false;
 		client_pending_minimized_state(c, 0);
 	}
 	if (!c->overview_member)
@@ -170,27 +170,27 @@ void stage_unstash(Client *c) {
 }
 
 void stage_forget(Client *c) {
-	if (c->isstaged)
+	if (c->stage.staged)
 		stage_close_popups(c);
 	stage_drag_forget(c);
-	c->stage_previewing = false;
-	c->stage_preview_mon = NULL;
-	c->stage_docked = false;
-	c->isstaged = false;
+	c->stage.previewing = false;
+	c->stage.preview_mon = NULL;
+	c->stage.docked = false;
+	c->stage.staged = false;
 	card_destroy(c);
 }
 
 void stage_adopt_size(Client *c, int32_t w, int32_t h) {
-	if (!c->isstaged || w <= 0 || h <= 0)
+	if (!c->stage.staged || w <= 0 || h <= 0)
 		return;
 	int32_t cw, ch;
 	stage_content_size(c, &cw, &ch);
 	if (w == cw && h == ch)
 		return;
 	float s = stage_current_scale(c);
-	float z = config.stage_text_zoom;
-	c->stage_lw = (int32_t)roundf(w * z);
-	c->stage_lh = (int32_t)roundf(h * z);
+	float z = config.stage.text_zoom;
+	c->stage.lw = (int32_t)roundf(w * z);
+	c->stage.lh = (int32_t)roundf(h * z);
 	struct wlr_box box =
 		stage_box_at(stage_card_of(c), c->geom.x + c->geom.width / 2.0,
 					 c->geom.y + c->geom.height / 2.0, s);
@@ -207,8 +207,8 @@ void stage_release_all(Monitor *m) {
 	wl_list_for_each(c, &server.clients, link) {
 		// Docks outlive tag switches but not the stage leaving their own tag.
 		bool docked_here =
-			c->stage_docked && c->mon == m && (c->tags & m->tagset[m->seltags]);
-		if (docked_here || (c->isstaged && VISIBLEON(c, m)))
+			c->stage.docked && c->mon == m && (c->tags & m->tagset[m->seltags]);
+		if (docked_here || (c->stage.staged && VISIBLEON(c, m)))
 			stage_unstash(c);
 	}
 }
@@ -263,7 +263,7 @@ void stage_align_sides(Monitor *m, Client *skip) {
 	Client *c;
 	int32_t n = 0, nl = 0, nr = 0;
 	wl_list_for_each(c, &server.clients, link) {
-		if (c != skip && c->isstaged && VISIBLEON(c, m))
+		if (c != skip && c->stage.staged && VISIBLEON(c, m))
 			n++;
 	}
 	if (n == 0)
@@ -273,7 +273,7 @@ void stage_align_sides(Monitor *m, Client *skip) {
 	Client **left = ecalloc(n, sizeof(*left));
 	Client **right = ecalloc(n, sizeof(*right));
 	wl_list_for_each(c, &server.clients, link) {
-		if (c == skip || !c->isstaged || !VISIBLEON(c, m))
+		if (c == skip || !c->stage.staged || !VISIBLEON(c, m))
 			continue;
 		if (stage_on_left(&f, c, nl, nr))
 			left[nl++] = c;
@@ -297,7 +297,7 @@ void stage_stash_free(Monitor *m, Client *c) {
 	Client *o;
 
 	wl_list_for_each(o, &server.clients, link) {
-		if (o == c || !o->isstaged || !VISIBLEON(o, m))
+		if (o == c || !o->stage.staged || !VISIBLEON(o, m))
 			continue;
 		int32_t below = o->geom.y + o->geom.height + f.gap_in;
 		if (o->geom.x + o->geom.width / 2 < s.x) {
@@ -312,8 +312,8 @@ void stage_stash_free(Monitor *m, Client *c) {
 	bool left = nl <= nr;
 	int32_t bw2 = 2 * (int32_t)c->bw;
 	struct stage_card k = {
-		.lw = c->isstaged ? c->stage_lw : c->geom.width - bw2,
-		.lh = c->isstaged ? c->stage_lh : c->geom.height - bw2,
+		.lw = c->stage.staged ? c->stage.lw : c->geom.width - bw2,
+		.lh = c->stage.staged ? c->stage.lh : c->geom.height - bw2,
 		.bw = (int32_t)c->bw,
 	};
 	if (k.lw <= 0 || k.lh <= 0)
@@ -334,11 +334,11 @@ void stage_flip(Monitor *m) {
 		return;
 	uint32_t tag = get_mon_curtag(m);
 	Pertag *p = m->pertag;
-	p->stage_flip[tag] = !p->stage_flip[tag];
+	p->stage[tag].flip = !p->stage[tag].flip;
 	// Swapping the dividers keeps each tile's share through the flip.
-	float x = p->stage_split_x[tag];
-	p->stage_split_x[tag] = p->stage_split_y[tag];
-	p->stage_split_y[tag] = x;
+	float x = p->stage[tag].split_x;
+	p->stage[tag].split_x = p->stage[tag].split_y;
+	p->stage[tag].split_y = x;
 	arrange(m, false, false);
 }
 
@@ -348,13 +348,13 @@ void stage(Monitor *m) {
 
 	wl_list_for_each(c, &server.clients, link) {
 		// Restored by the taskbar or restore_minimized rather than undocked.
-		if (c->stage_docked && !c->isminimized)
-			c->stage_docked = false;
+		if (c->stage.docked && !c->isminimized)
+			c->stage.docked = false;
 		if (!VISIBLEON(c, m) || c->iskilling)
 			continue;
-		if (c->isstaged && !c->isfloating)
+		if (c->stage.staged && !c->isfloating)
 			stage_unstash(c);
-		if (c->isstaged) {
+		if (c->stage.staged) {
 			// Staging skips the card while the surface is unmapped.
 			if (!c->card.tree && client_surface(c)->mapped)
 				card_create(c);
@@ -389,9 +389,9 @@ static void stage_hide_docked(Client *c) {
 // docked only moves to edge and keeps its place along it.
 void stage_dock_client(Client *c, int32_t edge, int32_t tier) {
 	Monitor *m = c->mon;
-	if (c->stage_docked) {
-		c->stage_dock_edge = edge;
-		c->stage_dock_tier = tier;
+	if (c->stage.docked) {
+		c->stage.dock_edge = edge;
+		c->stage.dock_tier = tier;
 		// Overview strips are laid out per edge; outside it the dock stays
 		// hidden and only the shell redraws.
 		if (m->isoverview)
@@ -401,10 +401,10 @@ void stage_dock_client(Client *c, int32_t edge, int32_t tier) {
 		return;
 	}
 	stage_close_popups(c);
-	c->stage_docked = true;
-	c->stage_dock_edge = edge;
-	c->stage_dock_tier = tier;
-	c->stage_dock_y = c->geom.y + c->geom.height / 2 - m->m.y;
+	c->stage.docked = true;
+	c->stage.dock_edge = edge;
+	c->stage.dock_tier = tier;
+	c->stage.dock_y = c->geom.y + c->geom.height / 2 - m->m.y;
 	client_pending_minimized_state(c, 1);
 	client_focus(client_focus_top(m), 1);
 	arrange(m, false, false);
@@ -412,16 +412,16 @@ void stage_dock_client(Client *c, int32_t edge, int32_t tier) {
 }
 
 static void stage_undock_client(Client *c) {
-	c->stage_docked = false;
+	c->stage.docked = false;
 	unminimize(c);
 
 	Monitor *m = c->mon;
-	if (!m || !c->isstaged || !is_stage_layout(m))
+	if (!m || !c->stage.staged || !is_stage_layout(m))
 		return;
 	struct stage_frame f = stage_frame_of(m);
 	stage_stash(c, stage_undock_box(&f, stage_card_of(c),
-									c->stage_dock_edge == STAGE_DOCK_LEFT,
-									c->stage_dock_y));
+									c->stage.dock_edge == STAGE_DOCK_LEFT,
+									c->stage.dock_y));
 	// unminimize already published, with the dock's box.
 	stage_notify(c);
 }
@@ -429,13 +429,13 @@ static void stage_undock_client(Client *c) {
 enum stage_result stage_dock_window(Client *c, int32_t edge) {
 	if (!c || !c->mon)
 		return STAGE_NO_CLIENT;
-	if (c->stage_docked) {
-		if (edge == STAGE_DOCK_NEAREST || edge == c->stage_dock_edge)
+	if (c->stage.docked) {
+		if (edge == STAGE_DOCK_NEAREST || edge == c->stage.dock_edge)
 			return STAGE_UNCHANGED;
-		stage_dock_client(c, edge, c->stage_dock_tier);
+		stage_dock_client(c, edge, c->stage.dock_tier);
 		return STAGE_CHANGED;
 	}
-	if (!c->isstaged || !is_stage_layout(c->mon))
+	if (!c->stage.staged || !is_stage_layout(c->mon))
 		return STAGE_NOT_STAGED;
 	if (edge == STAGE_DOCK_NEAREST) {
 		double cx = c->geom.x + c->geom.width / 2.0;
@@ -449,7 +449,7 @@ enum stage_result stage_dock_window(Client *c, int32_t edge) {
 enum stage_result stage_undock_window(Client *c) {
 	if (!c || !c->mon)
 		return STAGE_NO_CLIENT;
-	if (!c->stage_docked)
+	if (!c->stage.docked)
 		return STAGE_NOT_DOCKED;
 	stage_undock_client(c);
 	return STAGE_CHANGED;
@@ -460,11 +460,11 @@ enum stage_result stage_undock_window(Client *c) {
 enum stage_result stage_move_dock(Client *c, int32_t y) {
 	if (!c || !c->mon)
 		return STAGE_NO_CLIENT;
-	if (!c->stage_docked)
+	if (!c->stage.docked)
 		return STAGE_NOT_DOCKED;
 	y = MANGO_MAX(0, MANGO_MIN(y, c->mon->m.height));
-	bool changed = y != c->stage_dock_y;
-	c->stage_dock_y = y;
+	bool changed = y != c->stage.dock_y;
+	c->stage.dock_y = y;
 	stage_notify(c);
 	return changed ? STAGE_CHANGED : STAGE_UNCHANGED;
 }
@@ -472,7 +472,7 @@ enum stage_result stage_move_dock(Client *c, int32_t y) {
 // Docked windows are the shell's to draw. Only overview shows them, as cards
 // in its dock strips.
 bool stage_arrange_hidden(Monitor *m, Client *c) {
-	if (!c->stage_docked)
+	if (!c->stage.docked)
 		return false;
 	if (m->isoverview && c->overview_member &&
 		(c->tags & m->tagset[m->seltags]))
@@ -482,7 +482,7 @@ bool stage_arrange_hidden(Monitor *m, Client *c) {
 }
 
 static bool stage_overview_listed(Monitor *m, Client *c, int32_t edge) {
-	return c->mon == m && c->stage_docked && c->stage_dock_edge == edge &&
+	return c->mon == m && c->stage.docked && c->stage.dock_edge == edge &&
 		   c->overview_member && (c->tags & m->tagset[m->seltags]);
 }
 

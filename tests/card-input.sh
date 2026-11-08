@@ -21,6 +21,7 @@ ${CC:-cc} -std=c11 -O1 -g -DWLR_USE_UNSTABLE -DXWAYLAND \
     -Wl,--wrap=wlr_seat_pointer_notify_enter \
     -Wl,--wrap=wlr_seat_pointer_notify_motion \
     -Wl,--wrap=wlr_seat_pointer_notify_clear_focus \
+    -Wl,--wrap=wlr_seat_pointer_notify_frame \
     $(pkg-config --libs $deps) -lm -o "$build/card-input"
 "$build/card-input"
 ${CC:-cc} -std=c11 -O1 -g -DWLR_USE_UNSTABLE -DXWAYLAND \

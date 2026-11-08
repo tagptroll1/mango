@@ -1,7 +1,6 @@
 #include "mango/layout/overview.h"
 #include "mango/common/server.h"
 #include "mango/config/parse.h"
-#include "mango/layout/stage.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
 #include "mango/overview/overview.h"
@@ -593,8 +592,6 @@ void finish_jump_mode(Monitor *m) {
 }
 
 void overview(Monitor *m) {
-	// Docked stage windows take strips on the edges of the work area; the cards
-	// go between them. m->w itself stays the real work area throughout.
 	struct wlr_box area = stage_overview_docks(m, m->w);
 
 	if (m->ov_tab_layout && !m->is_jump_mode && !m->ov_normal_mode) {
