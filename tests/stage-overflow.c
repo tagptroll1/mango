@@ -38,16 +38,16 @@ static void check(bool ok, const char *name, const char *detail) {
 
 static void setup(int32_t w, int32_t h, bool gaps) {
 	config = (Config){
-		.stage_aspect = 1.0f,
-		.stage_scale_max = 0.8f,
-		.stage_scale_min = 0.6f,
-		.stage_scale_curve = 1.0f,
-		.stage_shrink_zone = 100,
-		.stage_dock_tiny = 64,
-		.stage_dock_zone = 48,
-		.stage_dock_mini_zone = 8,
-		.stage_overview_dock_ratio = 0.12f,
-		.stage_text_zoom = 1.0f,
+		.stage.aspect = 1.0f,
+		.stage.scale_max = 0.8f,
+		.stage.scale_min = 0.6f,
+		.stage.scale_curve = 1.0f,
+		.stage.shrink_zone = 100,
+		.stage.dock_tiny = 64,
+		.stage.dock_zone = 48,
+		.stage.dock_mini_zone = 8,
+		.stage.overview_dock_ratio = 0.12f,
+		.stage.text_zoom = 1.0f,
 		.overviewgappi = 5,
 		.overviewgappo = 30,
 		.borderpx = 2,
@@ -91,19 +91,19 @@ static bool stash_valid(Client *c, char *detail, size_t len) {
 	struct wlr_box *u = &mon.w;
 	struct wlr_box *g = &c->geom;
 	int32_t bw2 = 2 * (int32_t)c->bw;
-	float sc = c->stage_scale;
-	int32_t longest = MANGO_MAX(c->stage_lw, c->stage_lh);
-	float floor_px = MANGO_MIN((float)config.stage_dock_tiny,
-							   longest * config.stage_scale_max);
+	float sc = c->stage.scale;
+	int32_t longest = MANGO_MAX(c->stage.lw, c->stage.lh);
+	float floor_px = MANGO_MIN((float)config.stage.dock_tiny,
+							   longest * config.stage.scale_max);
 	snprintf(detail, len,
 			 "scale %.4f, box %d,%d %dx%d, logical %dx%d, center x %d-%d", sc,
-			 g->x, g->y, g->width, g->height, c->stage_lw, c->stage_lh, s.x,
+			 g->x, g->y, g->width, g->height, c->stage.lw, c->stage.lh, s.x,
 			 s.x + s.width);
 	struct wlr_box overlap;
-	return c->isstaged && isfinite(sc) && sc > 0.f && g->width > bw2 &&
+	return c->stage.staged && isfinite(sc) && sc > 0.f && g->width > bw2 &&
 		   g->height > bw2 &&
-		   abs(g->width - ((int32_t)roundf(c->stage_lw * sc) + bw2)) <= 1 &&
-		   abs(g->height - ((int32_t)roundf(c->stage_lh * sc) + bw2)) <= 1 &&
+		   abs(g->width - ((int32_t)roundf(c->stage.lw * sc) + bw2)) <= 1 &&
+		   abs(g->height - ((int32_t)roundf(c->stage.lh * sc) + bw2)) <= 1 &&
 		   longest * sc >= floor_px - 1.f && g->x >= u->x && g->y >= u->y &&
 		   g->x + g->width <= u->x + u->width &&
 		   g->y + g->height <= u->y + u->height &&
@@ -120,7 +120,7 @@ static void check_all_staged(const char *name) {
 	int32_t bad = 0, n = 0;
 	for (int32_t i = 0; i < NCLIENTS; i++) {
 		Client *c = &clients[i];
-		if (!c->mon || !c->isstaged)
+		if (!c->mon || !c->stage.staged)
 			continue;
 		n++;
 		char d[160];
@@ -201,7 +201,7 @@ int main(void) {
 	int32_t lw_before[NCLIENTS];
 	for (int32_t i = 0; i < NCLIENTS; i++) {
 		before[i] = clients[i].geom;
-		lw_before[i] = clients[i].stage_lw;
+		lw_before[i] = clients[i].stage.lw;
 	}
 	for (int32_t r = 0; r < 3; r++) {
 		stage_align_sides(&mon, NULL);
@@ -212,7 +212,7 @@ int main(void) {
 	bool same = true;
 	for (int32_t i = 0; i < NCLIENTS; i++)
 		same &= wlr_box_equal(&before[i], &clients[i].geom) &&
-				lw_before[i] == clients[i].stage_lw;
+				lw_before[i] == clients[i].stage.lw;
 	check(same, "repeated alignment keeps geometry and logical size", NULL);
 
 	/* Overview dock strip whose gaps alone exceed its height. */
@@ -220,8 +220,8 @@ int main(void) {
 	config.overviewgappi = 20;
 	for (int32_t i = 0; i < 120; i++) {
 		Client *c = add_client(1200, 900, 2);
-		c->stage_docked = true;
-		c->stage_dock_edge = STAGE_DOCK_LEFT;
+		c->stage.docked = true;
+		c->stage.dock_edge = STAGE_DOCK_LEFT;
 		c->overview_member = true;
 		c->overview_backup_geom = (struct wlr_box){0, 0, 1200, 900};
 	}

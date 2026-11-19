@@ -3,7 +3,6 @@
 #include "mango/common/server.h"
 #include "mango/common/util.h"
 #include "mango/draw/text-node.h"
-#include "mango/layout/card.h"
 #include "mango/layout/layout.h"
 #include "mango/manage/client.h"
 #include "mango/manage/monitor.h"
@@ -63,14 +62,16 @@ void overview_update_jump_label(Client *c) {
 	}
 }
 
-// Entering overview: every tag window shows its card and must not be disabled
-// by the subtree hiding logic.
+// Entering overview: saves and disables the real scene_surface tree and builds
+// an independent card tree to display content.
 void overview_backup_surface(Client *c) {
 	if (c->card.tree)
 		return;
 	if (!client_surface(c) || !client_surface(c)->mapped)
 		return;
 
+	// In overview every tag window must show its card and must not be disabled
+	// by the subtree hiding logic.
 	c->is_clip_to_hide = false;
 	client_update_visibility(c);
 
@@ -113,7 +114,6 @@ void overview_backup(Client *c) {
 }
 // Restores window state when switching back from overview to the normal view.
 void overview_restore(Client *c, const Arg *arg) {
-	// A card tree alone may be a stage card with nothing backed up.
 	if (!c->overview_member)
 		return;
 
@@ -128,9 +128,8 @@ void overview_restore(Client *c, const Arg *arg) {
 	c->animation.tagining = false;
 	c->is_restoring_from_ov = (arg->ui & c->tags & TAGMASK) == 0 ? true : false;
 
-	// Staged windows keep their card: the stage draws them as cards too, and a
-	// rebuild would flash the live surface.
-	if (!c->isstaged)
+	// Destroys the card tree and restores the real scene_surface tree.
+	if (!c->stage.staged)
 		card_destroy(c);
 
 	if (c->isfloating) {
@@ -167,8 +166,6 @@ void overview_restore(Client *c, const Arg *arg) {
 	c->overview_member = false;
 }
 
-// Overview state belongs to one monitor: hand it back before the client
-// leaves, and back up again if the new monitor is in overview too.
 void overview_change_mon(Client *c, Monitor *m) {
 	if (!c->overview_member || !c->mon || !m || m == c->mon)
 		return;

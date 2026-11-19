@@ -1,4 +1,4 @@
 {
 	"title": "Window Management",
-	"pages": ["layouts", "rules", "overview", "scratchpad"]
+	"pages": ["layouts", "stage", "rules", "overview", "scratchpad"]
 }

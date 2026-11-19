@@ -50,8 +50,8 @@ static Client *ov_add(int32_t i, int32_t w, int32_t h) {
 
 static void ov_dock(int32_t i, int32_t edge) {
 	Client *c = ov_add(i, 900, 600);
-	c->stage_docked = true;
-	c->stage_dock_edge = edge;
+	c->stage.docked = true;
+	c->stage.dock_edge = edge;
 	c->isminimized = 1;
 }
 

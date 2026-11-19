@@ -71,17 +71,17 @@ void stage_drag_forget(Client *c) {
 }
 
 static void stage_preview_clear(Client *c) {
-	if (!c->stage_previewing)
+	if (!c->stage.previewing)
 		return;
-	c->stage_previewing = false;
-	c->stage_preview_mon = NULL;
+	c->stage.previewing = false;
+	c->stage.preview_mon = NULL;
 	stage_notify(c);
 }
 
 void stage_monitor_close(Monitor *m) {
 	Client *c;
 	wl_list_for_each(c, &server.clients, link) {
-		if (c->stage_preview_mon == m)
+		if (c->stage.preview_mon == m)
 			stage_preview_clear(c);
 	}
 }
@@ -101,17 +101,17 @@ static void stage_preview_dock(Client *c, Monitor *m, struct wlr_box b,
 		return;
 	}
 	int32_t y = b.y + b.height / 2 - m->m.y;
-	bool moved_only = c->stage_previewing && c->stage_preview_mon == m &&
-					  c->stage_preview_edge == edge &&
-					  c->stage_preview_tier == tier;
-	if (moved_only && (y == c->stage_preview_y ||
+	bool moved_only = c->stage.previewing && c->stage.preview_mon == m &&
+					  c->stage.preview_edge == edge &&
+					  c->stage.preview_tier == tier;
+	if (moved_only && (y == c->stage.preview_y ||
 					   time - drag.preview_sent < STAGE_PREVIEW_MOVE_MS))
 		return;
-	c->stage_previewing = true;
-	c->stage_preview_mon = m;
-	c->stage_preview_edge = edge;
-	c->stage_preview_tier = tier;
-	c->stage_preview_y = y;
+	c->stage.previewing = true;
+	c->stage.preview_mon = m;
+	c->stage.preview_edge = edge;
+	c->stage.preview_tier = tier;
+	c->stage.preview_y = y;
 	drag.preview_sent = time;
 	stage_notify(c);
 }
@@ -136,8 +136,8 @@ void stage_resize_tile(Client *c, bool isdrag, int32_t offsetx,
 					   int32_t offsety) {
 	Monitor *m = c->mon;
 	uint32_t tag = get_mon_curtag(m);
-	float *sx = &m->pertag->stage_split_x[tag];
-	float *sy = &m->pertag->stage_split_y[tag];
+	float *sx = &m->pertag->stage[tag].split_x;
+	float *sy = &m->pertag->stage[tag].split_y;
 
 	if (isdrag && !server.start_drag_window) {
 		server.start_drag_window = true;
@@ -198,7 +198,7 @@ static void stage_track_shake(Client *c, uint32_t time) {
 		return;
 
 	if (shake.dir == 0) {
-		if (fabs(x - shake.ext) >= config.stage_shake_travel) {
+		if (fabs(x - shake.ext) >= config.stage.shake_travel) {
 			shake.dir = x > shake.ext ? 1 : -1;
 			shake.ext = x;
 		}
@@ -208,11 +208,11 @@ static void stage_track_shake(Client *c, uint32_t time) {
 		shake.ext = x;
 		return;
 	}
-	if ((shake.ext - x) * shake.dir < config.stage_shake_travel)
+	if ((shake.ext - x) * shake.dir < config.stage.shake_travel)
 		return;
 
 	// The last n flips sit at the front of the array, oldest first.
-	int32_t n = config.stage_shake_flips;
+	int32_t n = config.stage.shake_flips;
 	shake.dir = -shake.dir;
 	shake.ext = x;
 	memmove(shake.flips, shake.flips + 1, sizeof(shake.flips[0]) * (n - 1));
@@ -220,7 +220,7 @@ static void stage_track_shake(Client *c, uint32_t time) {
 	shake.nflips = MANGO_MIN(shake.nflips + 1, n);
 
 	if (shake.nflips == n &&
-		time - shake.flips[0] <= config.stage_shake_window_ms) {
+		time - shake.flips[0] <= config.stage.shake_window_ms) {
 		Monitor *m = monitor_at_point(server.cursor->x, server.cursor->y);
 		if (is_stage_layout(m)) {
 			shake.fired = true;
@@ -231,20 +231,20 @@ static void stage_track_shake(Client *c, uint32_t time) {
 
 // Gives c the drag card's logical size: a square a quarter of the center.
 static void stage_drag_size(Client *c, const struct stage_frame *f) {
-	c->stage_lw = c->stage_lh = stage_drag_logical(f, (int32_t)c->bw);
+	c->stage.lw = c->stage.lh = stage_drag_logical(f, (int32_t)c->bw);
 }
 
 bool stage_begin_move(Client *c, double x, double y) {
 	// Recorded for every move: a tile from another monitor may land here.
 	drag.c = c;
-	drag.was_staged = c->isstaged;
+	drag.was_staged = c->stage.staged;
 	drag.origin = c->geom;
 	drag.has_grab = false;
 	drag.morphing = false;
 
 	if (!is_stage_layout(c->mon))
 		return false;
-	if (!c->isstaged && !ISTILED(c))
+	if (!c->stage.staged && !ISTILED(c))
 		return false;
 
 	shake_reset(c);
@@ -252,7 +252,7 @@ bool stage_begin_move(Client *c, double x, double y) {
 	struct stage_frame f = stage_frame_of(c->mon);
 	double rx = (x - c->geom.x) / c->geom.width;
 	double ry = (y - c->geom.y) / c->geom.height;
-	if (!c->isstaged)
+	if (!c->stage.staged)
 		stage_stash(c, c->geom);
 	stage_drag_size(c, &f);
 	struct stage_card k = stage_card_of(c);
@@ -300,7 +300,7 @@ void stage_drag_motion(Client *c, uint32_t time) {
 		stage_preview_dock(c, NULL, c->float_geom, time);
 		return;
 	}
-	if (!c->isstaged) {
+	if (!c->stage.staged) {
 		// Same rule as the drop: only tiles dock unstaged.
 		bool docks = drag.c == c && c->drag_to_tile;
 		stage_preview_dock(c, docks ? m : NULL, c->float_geom, time);
@@ -321,7 +321,7 @@ void stage_drag_motion(Client *c, uint32_t time) {
 	struct stage_frame f = stage_frame_of(m);
 	struct stage_card k = stage_card_of(c);
 	float s = stage_scale_at(&f, k, server.cursor->x, drag.grab_rx);
-	c->stage_scale = s;
+	c->stage.scale = s;
 	struct wlr_box box = stage_box_at(k, 0, 0, s);
 	server.grab_offset_x = (int32_t)round(drag.grab_rx * box.width);
 	server.grab_offset_y = (int32_t)round(drag.grab_ry * box.height);
@@ -350,7 +350,7 @@ static bool stage_drop_box(Monitor *m, Client *target, Client *g, bool after,
 	int32_t at = after ? t + 1 : t, total = n + 1;
 	// A staged card swaps with a full center; a tile from another monitor
 	// pushes the last one out instead.
-	if (g->isstaged && n >= STAGE_CENTER_MAX) {
+	if (g->stage.staged && n >= STAGE_CENTER_MAX) {
 		at = t;
 		total = n;
 	}
@@ -412,7 +412,7 @@ bool stage_drop(Client *c) {
 	stage_preview_clear(c);
 
 	if (!is_stage_layout(m)) {
-		if (!c->isstaged)
+		if (!c->stage.staged)
 			return false;
 		// Dropped on a monitor without the stage: join its tiling.
 		stage_unstash(c);
@@ -424,7 +424,7 @@ bool stage_drop(Client *c) {
 	int32_t tier;
 	int32_t edge = stage_dock_edge_at(&f, c->geom, &tier);
 
-	if (!c->isstaged) {
+	if (!c->stage.staged) {
 		// A tile dragged in from another monitor stashes where it lands; plain
 		// floating windows stay out of the stage, docking just got in the way.
 		bool from_tile = ours && c->drag_to_tile;

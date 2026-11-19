@@ -52,6 +52,10 @@ void __wrap_wlr_seat_pointer_notify_clear_focus(struct wlr_seat *s) {
 	s->pointer_state.focused_surface = NULL;
 }
 
+void __wrap_wlr_seat_pointer_notify_frame(struct wlr_seat *s) {
+	assert(s == &seat);
+}
+
 /* Client lookup is independent of the input mapping under test. */
 int32_t client_is_x11(Client *c) { return c->type == X11; }
 struct wlr_surface *client_surface(Client *c) { return &surface; }
@@ -83,7 +87,9 @@ void resize_tile_client(Client *c, bool isdrag, int32_t x, int32_t y) {
 	abort();
 }
 bool stage_begin_move(Client *c, double x, double y) { abort(); }
-void client_set_floating(Client *c, int32_t floating) { abort(); }
+void client_set_floating(Client *c, int32_t floating, bool want_animation) {
+	abort();
+}
 void exit_scroller_stack(Client *c) { abort(); }
 void set_size_per(Monitor *m, Client *c, bool reset_proportion) { abort(); }
 uint32_t drag_refresh_interval_ms(const Monitor *m) { abort(); }

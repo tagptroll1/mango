@@ -6,7 +6,6 @@
 #include "mango/layout/horizontal.h"
 #include "mango/layout/overview.h"
 #include "mango/layout/scroll.h"
-#include "mango/layout/stage.h"
 #include "mango/layout/vertical.h"
 #include <stdbool.h>
 #include <stdint.h>

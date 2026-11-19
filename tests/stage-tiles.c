@@ -58,7 +58,7 @@ static bool preview_matches(int32_t n, int32_t target, bool after, bool gaps,
 			 want.height, card->geom.x, card->geom.y, card->geom.width,
 			 card->geom.height);
 	stage_set_drop_area(t);
-	return hinted && !card->isstaged && wlr_box_equal(&want, &card->geom);
+	return hinted && !card->stage.staged && wlr_box_equal(&want, &card->geom);
 }
 
 int main(void) {

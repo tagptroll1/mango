@@ -33,17 +33,17 @@ int main(void) {
 	json_is("json staged", c,
 			"{\"is_staged\":true,\"stage_dock\":null,"
 			"\"stage_dock_preview\":null}");
-	c->stage_previewing = true;
-	c->stage_preview_edge = STAGE_DOCK_RIGHT;
-	c->stage_preview_tier = STAGE_DOCK_MINI;
-	c->stage_preview_y = 333;
-	c->stage_preview_mon = &mon;
+	c->stage.previewing = true;
+	c->stage.preview_edge = STAGE_DOCK_RIGHT;
+	c->stage.preview_tier = STAGE_DOCK_MINI;
+	c->stage.preview_y = 333;
+	c->stage.preview_mon = &mon;
 	json_is("json preview", c,
 			"{\"is_staged\":true,\"stage_dock\":null,\"stage_dock_preview\":"
 			"{\"edge\":\"right\",\"tier\":\"mini\",\"y\":333,"
 			"\"monitor\":\"DP-1\"}}");
-	c->stage_previewing = false;
-	c->stage_preview_mon = NULL;
+	c->stage.previewing = false;
+	c->stage.preview_mon = NULL;
 
 	stage_dock(&(Arg){.i = 99, .tc = c});
 	result_is("dock bad edge", 0, "bad-edge");
@@ -101,15 +101,15 @@ int main(void) {
 	result_is("undock no monitor", 0, "no-client");
 
 	server.selected_monitor = &mon;
-	pertag.stage_split_x[0] = 0.3f;
-	pertag.stage_split_y[0] = 0.6f;
+	pertag.stage[0].split_x = 0.3f;
+	pertag.stage[0].split_y = 0.6f;
 	stage_flip_toggle(&(Arg){0});
-	check(pertag.stage_flip[0] && pertag.stage_split_x[0] == 0.6f &&
-			  pertag.stage_split_y[0] == 0.3f,
+	check(pertag.stage[0].flip && pertag.stage[0].split_x == 0.6f &&
+			  pertag.stage[0].split_y == 0.3f,
 		  "flip swaps the dividers", NULL);
 	pertag.ltidxs[0] = &tile_layout;
 	stage_flip_toggle(&(Arg){0});
-	check(pertag.stage_flip[0], "flip outside the stage does nothing", NULL);
+	check(pertag.stage[0].flip, "flip outside the stage does nothing", NULL);
 
 	return failures ? EXIT_FAILURE : EXIT_SUCCESS;
 }

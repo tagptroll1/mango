@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Stage patch (read first)
+
+This tree carries a local patch (Stage layout, shared card renderer) on top of upstream. **Before changing patch code, touching an upstream file for the patch, or rebasing, read `PATCH.md` in full and follow it.** It holds the minimal-upstream-surface rules, the patch-owned files, every upstream touch point, the invariants, and the rebase and verification steps. Update `PATCH.md` when the patch surface changes.
+
 ## Project
 
 Mango is a Wayland compositor in C, forked from dwl. Built on wlroots 0.20 and SceneFX 0.5 (blur, shadow, corner radius). Meson build produces three binaries:
@@ -57,7 +61,7 @@ Each test prints `PASS`/`FAIL` lines; the script stops at the first failing bina
 
 **Headers mirror sources.** `src/<area>/<file>.c` pairs with `include/mango/<area>/<file>.h`, included as `"mango/<area>/<file>.h"`. Areas: `animation`, `common`, `config`, `dispatch`, `draw`, `ext-protocol`, `input`, `ipc`, `layout`, `manage`, `overview`, `switcher`.
 
-**Tags and layouts.** Tags (bitmask, `TAGMASK`), not workspaces. Each monitor has a `Pertag` holding per-tag state, including `ltidxs[tag]` (layout pointer). `arrange(m, ...)` in `src/layout/arrange.c` is the central re-layout entry: `pre_calculate_before_arrange`, then the current tag's `Layout.arrange(m)` (or `overviewlayout` when `m->isoverview`), then tag gather, pointer refresh, and an IPC status broadcast. Layouts register in the `layouts[]` table in `arrange.c` with an enum id in `include/mango/layout/layout.h`; `predict` callbacks compute a client's future box via `LayoutContext.probe`. Layout implementations live in `src/layout/{horizontal,vertical,scroll,dwindle,overview,stage}.c`.
+**Tags and layouts.** Tags (bitmask, `TAGMASK`), not workspaces. Each monitor has a `Pertag` holding per-tag state, including `ltidxs[tag]` (layout pointer). `arrange(m, ...)` in `src/layout/arrange.c` is the central re-layout entry: `pre_calculate_before_arrange`, then the current tag's `Layout.arrange(m)` (or `overviewlayout` when `m->isoverview`), then tag gather, pointer refresh, and an IPC status broadcast. Layouts register in the `layouts[]` table in `arrange.c` with an enum id in `include/mango/layout/layout.h`; `predict` callbacks compute a client's future box via `LayoutContext.probe`. Layout implementations live in `src/layout/{horizontal,vertical,scroll,dwindle,overview}.c` (stage: see `PATCH.md`).
 
 **Geometry vs. rendering.** Layouts set target geometry; `src/animation/` interpolates it (baked bezier curves in `server.baked_points_*`) and applies it to scene nodes. Client visibility, borders, and SceneFX effects are applied in `src/animation/client.c`; tag-switch animation in `src/animation/tag.c`. Closing windows/layers move to `fadeout_clients`/`fadeout_layers`.
 
@@ -68,46 +72,6 @@ Each test prints `PASS`/`FAIL` lines; the script stops at the first failing bina
 **IPC.** `src/ipc/ipc.c` serves a Unix socket (`MANGO_INSTANCE_SIGNATURE`) with cJSON. `handle_command()` handles `get ...` queries, `watch ...` subscriptions, and `dispatch <func>,<args...>` (routed through `parse_func_name()`; result reported via `ipc_dispatch_result`). State changes call `printstatus(IPC_WATCH_*)` / `ipc_notify_*` to push updates to watchers. CLI contract documented in `docs/ipc.md` and `mmsg/mmsg.1.in`.
 
 **Protocols.** Extra Wayland protocol glue (ext-workspace, foreign-toplevel, tearing, text-input/IME, xdg-activation, HDR, xdg-output) lives in `src/ext-protocol/`.
-
-## Stage layout and cards
-
-User-facing behaviour, config keys and IPC are documented in `docs/window-management/layouts.md#stage-layout` and `docs/ipc.md#stage-layout`.
-
-**Module map.**
-
-| File | Owns |
-| :--- | :--- |
-| `src/layout/stage-geometry.c` | Pure geometry: center square, tile boxes, scale solver, column/strip/undock boxes. Inputs are a `struct stage_frame` (monitor boxes, gaps, splits, tunables; built by `stage_frame_of()`) and a `struct stage_card` (logical size, border). It never reads clients, config or stage history. |
-| `src/layout/stage.c` | Layout pass `stage()` and the state transitions (stash, unstash, dock, undock, forget, adopt size), the domain operations that return `enum stage_result`, and the overview dock strips. |
-| `src/layout/stage-drag.c` | Pointer interaction: drag, pickup ease, shake, drop hint, divider resize. |
-| `src/layout/stage-internal.h` | Private header shared by those three. `include/mango/layout/stage.h` is the public API, free of IPC/cJSON types. |
-| `src/dispatch/stage.c` | Bind/IPC adapters: parse `Arg`, call the domain operation, translate `enum stage_result` into `ipc_dispatch_result`. |
-| `src/ipc/stage.c` | `stage_client_json()`: the `is_staged`, `stage_dock`, `stage_dock_preview` client fields. |
-| `src/layout/card.c` | Shared card renderer used by stage cards and overview. |
-
-**Stage invariants.**
-- State changes go only through the transitions. Each one runs in this order: close popups, fields, minimized state, focus, card, arrange, IPC.
-- `stage_stash()` validates the box before it changes any field. The first stash sets the logical size (`stage_lw`/`stage_lh`) from the client's committed geometry, so the scale for a box must be solved after that stash (see the full-center swap in `stage_drop()`).
-- Stash and unstash also run inside the layout pass, so their callers arrange, and arrange notifies.
-- The dock operations notify last, after the final placement. `unminimize()` publishes before the undock box exists, so `stage_undock_client()` notifies again after it.
-- There is one pointer grab, so the file-static drag/shake/hint state in `stage-drag.c` is global, not per monitor. `stage_forget()` clears it through `stage_drag_forget()`, and `stage_monitor_close()` drops previews aimed at a removed output.
-- Overview gets the dock strips' remainder as an explicit area (`stage_overview_docks()` returns it; `overview_scale(m, area)`). `m->w` is never rewritten.
-
-**Card lifecycle** (`include/mango/layout/card.h`).
-- `Client.card` (`struct card_state`) holds the tree, surface entries, popups and the mapping.
-- `card.tree` marks that the card exists:
-  - `card_create()` makes the tree, initializes the lists, and then hides the real surface tree through `client_update_visibility()`.
-  - `card_destroy()` runs in this order: close card popups, detach surface listeners, destroy the tree, show the real surface.
-  - Both are idempotent, and zeroed state means no card.
-- A card does not imply overview ownership. `overview_member` and the `overview_*bak` fields belong to overview; stage cards keep their card through overview exit.
-- A replacement client builds its own card and never copies another client's listeners.
-
-**Coordinate spaces.**
-- *Card-local*: the card tree sits at `(bw, bw)` inside `c->scene`. Content is scaled by `card.scale_x/y`.
-- *Window-geometry-local*: the xdg window geometry. `card.clip_x/y` (from `client_get_clip()`) is its offset into the root surface.
-- *Surface-local*: card point / scale + clip - subsurface offset. Card buffers return surface-local hits (`card_owns_buffer()`, `card_surface_coords()`).
-- Popup geometry is relative to the parent's window geometry, so a card popup sits at `bw + g * scale`.
-- X11 sizes are converted to logical once in `client_get_geometry()`. Card code reads the X11 surface's logical size.
 
 ## Docs
 

@@ -6,7 +6,6 @@
 #include "mango/data/static_keymap.h"
 #include "mango/input/pointer.h"
 #include "mango/layout/arrange.h"
-#include "mango/layout/card.h"
 #include "mango/manage/client.h"
 #include "mango/manage/layer.h"
 #include "mango/manage/monitor.h"
@@ -300,7 +299,6 @@ bool node_at_point(double x, double y, struct wlr_surface **psurface,
 						*nx = sx;
 					if (ny)
 						*ny = sy;
-					// Decorations must honor card input rejection.
 					if (!wlr_surface_point_accepts_input(surface, sx, sy))
 						surface = NULL;
 				}

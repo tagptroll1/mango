@@ -31,9 +31,9 @@ int main(void) {
 	float want_x = 0.5f + 100.f / (in.width - f.gap_in);
 	float want_y = 0.5f - 50.f / (in.height - f.gap_in);
 	snprintf(detail, sizeof(detail), "split %.4f,%.4f want %.4f,%.4f",
-			 pertag.stage_split_x[0], pertag.stage_split_y[0], want_x, want_y);
-	check(fabsf(pertag.stage_split_x[0] - want_x) < 1e-5f &&
-			  fabsf(pertag.stage_split_y[0] - want_y) < 1e-5f && arranges == 1,
+			 pertag.stage[0].split_x, pertag.stage[0].split_y, want_x, want_y);
+	check(fabsf(pertag.stage[0].split_x - want_x) < 1e-5f &&
+			  fabsf(pertag.stage[0].split_y - want_y) < 1e-5f && arranges == 1,
 		  "keyboard resize", detail);
 
 	/* Pointer resize follows the cursor from where the drag began. */
@@ -47,9 +47,9 @@ int main(void) {
 	stage_resize_tile(&clients[0], true, 0, 0);
 	want_x = 0.5f + 200.f / (in.width - f.gap_in);
 	snprintf(detail, sizeof(detail), "split %.4f want %.4f",
-			 pertag.stage_split_x[0], want_x);
-	check(fabsf(pertag.stage_split_x[0] - want_x) < 1e-5f &&
-			  pertag.stage_split_y[0] == 0.5f,
+			 pertag.stage[0].split_x, want_x);
+	check(fabsf(pertag.stage[0].split_x - want_x) < 1e-5f &&
+			  pertag.stage[0].split_y == 0.5f,
 		  "pointer resize", detail);
 
 	/* Four quick flips of a dragged card stash every center tile. */
@@ -64,7 +64,7 @@ int main(void) {
 		move_to(card, xs[i], 600, 100 + 50 * i);
 	int32_t staged = 0;
 	for (int32_t i = 0; i < 4; i++)
-		staged += clients[i].isstaged;
+		staged += clients[i].stage.staged;
 	check(staged == 4, "shake stashes the center", NULL);
 
 	/* The same moves spread over too long a time do nothing. */
@@ -78,7 +78,7 @@ int main(void) {
 		move_to(card, xs[i], 600, 100 + 600 * i);
 	staged = 0;
 	for (int32_t i = 0; i < 4; i++)
-		staged += clients[i].isstaged;
+		staged += clients[i].stage.staged;
 	check(staged == 0, "slow moves are not a shake", NULL);
 
 	/* Pickup eases from the old box only with move animations on. */
@@ -107,10 +107,11 @@ int main(void) {
 	grab(card, 200, 600);
 	move_to(card, 300, 600, 0);
 	stage_forget(card);
-	check(!drag.c && !shake.c && !card->isstaged, "unmap during drag", NULL);
+	check(!drag.c && !shake.c && !card->stage.staged, "unmap during drag",
+		  NULL);
 	Client *plain = add_tile(5);
 	plain->isfloating = 1;
-	check(!stage_drop(plain) && !plain->isstaged,
+	check(!stage_drop(plain) && !plain->stage.staged,
 		  "floating window dropped after unmap stays out", NULL);
 
 	/* A preview aimed at a monitor going away is dropped and reported. */
@@ -118,10 +119,10 @@ int main(void) {
 	card = add_card(6, (struct wlr_box){70, 500, 324, 244});
 	grab(card, 200, 600);
 	move_to(card, 30, 600, 0);
-	bool previewing = card->stage_previewing && card->stage_preview_mon == &mon;
+	bool previewing = card->stage.previewing && card->stage.preview_mon == &mon;
 	int32_t before = notifies;
 	stage_monitor_close(&mon);
-	check(previewing && !card->stage_previewing && !card->stage_preview_mon &&
+	check(previewing && !card->stage.previewing && !card->stage.preview_mon &&
 			  notifies > before,
 		  "monitor removal clears the preview", NULL);
 
@@ -130,7 +131,7 @@ int main(void) {
 	card = add_card(6, (struct wlr_box){70, 500, 324, 244});
 	grab(card, 200, 600);
 	card->mon = &other;
-	check(!stage_drop(card) && !card->isstaged && !card->isfloating,
+	check(!stage_drop(card) && !card->stage.staged && !card->isfloating,
 		  "drop into an ordinary layout", NULL);
 
 	/* A tile dragged in from another monitor stashes where it lands. */
@@ -151,7 +152,7 @@ int main(void) {
 	bool kept = stage_drop(tile);
 	snprintf(detail, sizeof(detail), "box %d,%d %dx%d", tile->geom.x,
 			 tile->geom.y, tile->geom.width, tile->geom.height);
-	check(kept && tile->isstaged && tile->geom.width > 4 &&
+	check(kept && tile->stage.staged && tile->geom.width > 4 &&
 			  wlr_box_contains_point(&tile->geom, 300, 600),
 		  "tile from another monitor stashes at the cursor", detail);
 

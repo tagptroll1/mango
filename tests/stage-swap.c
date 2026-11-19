@@ -55,17 +55,17 @@ static void check(bool ok, const char *name, const char *detail) {
 
 static void setup(void) {
 	config = (Config){
-		.stage_aspect = 1.0f,
-		.stage_scale_max = 0.8f,
-		.stage_scale_min = 0.6f,
-		.stage_scale_curve = 1.0f,
-		.stage_shrink_zone = 100,
-		.stage_dock_tiny = 64,
-		.stage_dock_zone = 48,
-		.stage_dock_mini_zone = 8,
-		.stage_text_zoom = 1.0f,
-		.stage_shake_travel = 40,
-		.stage_shake_flips = 3,
+		.stage.aspect = 1.0f,
+		.stage.scale_max = 0.8f,
+		.stage.scale_min = 0.6f,
+		.stage.scale_curve = 1.0f,
+		.stage.shrink_zone = 100,
+		.stage.dock_tiny = 64,
+		.stage.dock_zone = 48,
+		.stage.dock_mini_zone = 8,
+		.stage.text_zoom = 1.0f,
+		.stage.shake_travel = 40,
+		.stage.shake_flips = 3,
 		.borderpx = 2,
 	};
 	server.enable_gaps = true;
@@ -191,12 +191,12 @@ static struct swap_result run_swap(const struct swap_case *k,
 	stage_drop(g);
 
 	r.box = target->geom;
-	r.scale = target->stage_scale;
-	r.lw = target->stage_lw;
-	r.lh = target->stage_lh;
+	r.scale = target->stage.scale;
+	r.lw = target->stage.lw;
+	r.lh = target->stage.lh;
 	r.tiled = tiled_count();
 	r.grabbed_tiled = ISTILED(g);
-	r.target_staged = target->isstaged;
+	r.target_staged = target->stage.staged;
 	return r;
 }
 
@@ -320,7 +320,7 @@ int main(void) {
 	stage_drop(g);
 	bool none_staged = true;
 	for (int32_t i = 0; i < 3; i++)
-		none_staged &= !clients[i].isstaged;
+		none_staged &= !clients[i].stage.staged;
 	check(ISTILED(g) && tiled_count() == 4 && none_staged,
 		  "center not full joins the center", NULL);
 
@@ -342,7 +342,8 @@ int main(void) {
 	stage_drop(g);
 	snprintf(detail, sizeof(detail), "box %d,%d %dx%d", g->geom.x, g->geom.y,
 			 g->geom.width, g->geom.height);
-	check(g->isstaged && wlr_box_equal(&g->geom, &origin) && tiled_count() == 4,
+	check(g->stage.staged && wlr_box_equal(&g->geom, &origin) &&
+			  tiled_count() == 4,
 		  "full center gap drop returns to origin", detail);
 
 	return failures ? EXIT_FAILURE : EXIT_SUCCESS;

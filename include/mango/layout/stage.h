@@ -2,6 +2,8 @@
 #define __LAYOUT_STAGE_H__ 1
 
 #include "mango/common/types.h"
+#include "mango/config/stage.h"
+#include "mango/layout/card.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <wlr/util/box.h>
@@ -25,6 +27,28 @@ enum stage_result {
 	STAGE_NO_CLIENT,
 	STAGE_NOT_STAGED,
 	STAGE_NOT_DOCKED,
+};
+
+// Client.stage. Stashed at lw x lh, shown scaled on a card.
+struct stage_client {
+	bool staged;
+	int32_t lw, lh;
+	float scale;
+	// Docked: hidden like a minimize, drawn by the shell at an edge.
+	bool docked;
+	int32_t dock_edge, dock_tier, dock_y;
+	// Dock a release would make right now, for the shell to preview. The drop
+	// lands on preview_mon; mon stays the source until the drop.
+	bool previewing;
+	int32_t preview_edge, preview_tier, preview_y;
+	Monitor *preview_mon;
+};
+
+// Pertag.stage[tag]. Center tiles stacked instead of side by side, and divider
+// positions as fractions of the square, where 0 means half.
+struct stage_tag {
+	int32_t flip;
+	float split_x, split_y;
 };
 
 void stage(Monitor *m);

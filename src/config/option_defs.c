@@ -19,7 +19,6 @@
 #include "mango/config/error_store.h"
 #include "mango/config/watcher.h"
 #include "mango/dispatch/bind.h"
-#include "mango/dispatch/stage.h"
 #include "mango/ext-protocol/hdr.h"
 #include "mango/input/device.h"
 #include "mango/input/keyboard.h"
@@ -54,6 +53,8 @@ static bool is_title_message_bar_decorate_key(const char *key,
 }
 
 bool parse_option(Config *config, char *key, char *value, int line_number) {
+	if (stage_parse_option(&config->stage, key, value))
+		return true;
 	if (strcmp(key, "key_mode") == 0) {
 		snprintf(config->keymode, sizeof(config->keymode), "%.27s", value);
 	} else if (strcmp(key, "animations") == 0) {
@@ -180,32 +181,6 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		config->edge_scroller_pointer_focus = atoi(value);
 	} else if (strcmp(key, "edge_scroller_focus_allow_speed") == 0) {
 		config->edge_scroller_focus_allow_speed = atof(value);
-	} else if (strcmp(key, "stage_aspect") == 0) {
-		config->stage_aspect = atof(value);
-	} else if (strcmp(key, "stage_scale_max") == 0) {
-		config->stage_scale_max = atof(value);
-	} else if (strcmp(key, "stage_scale_min") == 0) {
-		config->stage_scale_min = atof(value);
-	} else if (strcmp(key, "stage_scale_curve") == 0) {
-		config->stage_scale_curve = atof(value);
-	} else if (strcmp(key, "stage_shrink_zone") == 0) {
-		config->stage_shrink_zone = atoi(value);
-	} else if (strcmp(key, "stage_dock_tiny") == 0) {
-		config->stage_dock_tiny = atoi(value);
-	} else if (strcmp(key, "stage_dock_zone") == 0) {
-		config->stage_dock_zone = atoi(value);
-	} else if (strcmp(key, "stage_dock_mini_zone") == 0) {
-		config->stage_dock_mini_zone = atoi(value);
-	} else if (strcmp(key, "stage_overview_dock_ratio") == 0) {
-		config->stage_overview_dock_ratio = atof(value);
-	} else if (strcmp(key, "stage_shake_flips") == 0) {
-		config->stage_shake_flips = atoi(value);
-	} else if (strcmp(key, "stage_shake_travel") == 0) {
-		config->stage_shake_travel = atoi(value);
-	} else if (strcmp(key, "stage_shake_window_ms") == 0) {
-		config->stage_shake_window_ms = atoi(value);
-	} else if (strcmp(key, "stage_text_zoom") == 0) {
-		config->stage_text_zoom = atof(value);
 	} else if (strcmp(key, "focus_cross_monitor") == 0) {
 		config->focus_cross_monitor = atoi(value);
 	} else if (strcmp(key, "focus_direction_only_zone_overlap") == 0) {
@@ -2409,6 +2384,7 @@ bool apply_option_expanded(Config *config, char *key, char *value,
 }
 
 void set_value_default() {
+	stage_config_defaults(&config.stage);
 	config.animations = 1;
 	config.layer_animations = 0;
 	config.animation_type_open = ANIM_TYPE_UNSET;
@@ -2480,19 +2456,6 @@ void set_value_default() {
 	config.scroller_prefer_overspread = 1;
 	config.edge_scroller_pointer_focus = 1;
 	config.edge_scroller_focus_allow_speed = 0.0f;
-	config.stage_aspect = 1.0f;
-	config.stage_scale_max = 0.8f;
-	config.stage_scale_min = 0.6f;
-	config.stage_scale_curve = 1.0f;
-	config.stage_shrink_zone = 100;
-	config.stage_dock_tiny = 64;
-	config.stage_dock_zone = 48;
-	config.stage_dock_mini_zone = 8;
-	config.stage_overview_dock_ratio = 0.12f;
-	config.stage_shake_flips = 4;
-	config.stage_shake_travel = 40;
-	config.stage_shake_window_ms = 800;
-	config.stage_text_zoom = 1.0f;
 	config.focus_cross_monitor = 0;
 	config.focusdir_only_zone_overlap = 1;
 	config.exchange_cross_monitor = 0;
@@ -2774,6 +2737,7 @@ void set_value_default() {
 }
 
 void override_config(void) {
+	stage_config_clamp(&config.stage);
 	config.animations = CLAMP_INT(config.animations, 0, 1);
 	config.layer_animations = CLAMP_INT(config.layer_animations, 0, 1);
 	config.tag_animation_direction =
@@ -2813,28 +2777,6 @@ void override_config(void) {
 		CLAMP_INT(config.edge_scroller_pointer_focus, 0, 1);
 	config.edge_scroller_focus_allow_speed =
 		CLAMP_FLOAT(config.edge_scroller_focus_allow_speed, 0.0f, 1000.0f);
-	// Stage falloff and shrink math divide by these gaps, so keep them ordered.
-	config.stage_aspect = CLAMP_FLOAT(config.stage_aspect, 0.5f, 4.0f);
-	config.stage_scale_max = CLAMP_FLOAT(config.stage_scale_max, 0.05f, 1.0f);
-	config.stage_scale_min =
-		CLAMP_FLOAT(config.stage_scale_min, 0.05f, config.stage_scale_max);
-	config.stage_scale_curve =
-		CLAMP_FLOAT(config.stage_scale_curve, 0.1f, 10.0f);
-	config.stage_dock_mini_zone =
-		CLAMP_INT(config.stage_dock_mini_zone, 0, 1000);
-	config.stage_dock_zone =
-		CLAMP_INT(config.stage_dock_zone, config.stage_dock_mini_zone, 1000);
-	config.stage_shrink_zone =
-		CLAMP_INT(config.stage_shrink_zone, config.stage_dock_zone + 1, 2000);
-	config.stage_dock_tiny = CLAMP_INT(config.stage_dock_tiny, 8, 1000);
-	config.stage_overview_dock_ratio =
-		CLAMP_FLOAT(config.stage_overview_dock_ratio, 0.02f, 0.5f);
-	config.stage_shake_flips =
-		CLAMP_INT(config.stage_shake_flips, 2, STAGE_SHAKE_FLIPS_MAX);
-	config.stage_shake_travel = CLAMP_INT(config.stage_shake_travel, 1, 1000);
-	config.stage_shake_window_ms =
-		CLAMP_INT(config.stage_shake_window_ms, 50, 10000);
-	config.stage_text_zoom = CLAMP_FLOAT(config.stage_text_zoom, 0.5f, 4.0f);
 	config.scroller_structs = CLAMP_INT(config.scroller_structs, 0, 1000);
 	config.default_mfact = CLAMP_FLOAT(config.default_mfact, 0.1f, 0.9f);
 	config.default_nmaster = CLAMP_INT(config.default_nmaster, 1, 1000);

@@ -29,8 +29,6 @@
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 
-struct ipc_dispatch_result ipc_dispatch_result = {-1, NULL};
-
 static struct wl_list ipc_watch_clients;
 static int ipc_device_watch_count;
 
@@ -969,21 +967,9 @@ void handle_command(int client_fd, const char *cmd_raw) {
 		}
 
 		if (func) {
-			ipc_dispatch_result = (struct ipc_dispatch_result){-1, NULL};
+			ipc_dispatch_begin();
 			func(&arg);
-			if (ipc_dispatch_result.changed < 0) {
-				send_static_json(client_fd, "{\"success\":true}\n");
-			} else {
-				cJSON *r = cJSON_CreateObject();
-				cJSON_AddBoolToObject(r, "success", true);
-				cJSON_AddBoolToObject(r, "changed",
-									  ipc_dispatch_result.changed);
-				if (ipc_dispatch_result.reason)
-					cJSON_AddStringToObject(r, "reason",
-											ipc_dispatch_result.reason);
-				ipc_notify_json_to_fd(client_fd, r);
-				cJSON_Delete(r);
-			}
+			ipc_dispatch_reply(client_fd);
 		} else {
 			send_static_json(client_fd, "{\"error\":\"unknown function\"}\n");
 		}

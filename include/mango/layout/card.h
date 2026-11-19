@@ -22,10 +22,18 @@ struct wlr_scene_buffer;
 struct card_state {
 	struct wlr_scene_tree *tree;
 	struct wl_list surfaces; // card.c's private per-surface entries
-	struct wl_list popups;	 // Popup.card_link
+	struct wl_list popups;	 // Popup.card.link
 	// Surface-local to card coordinates, from the last layout.
 	float scale_x, scale_y;
 	int32_t clip_x, clip_y;
+};
+
+// Popup.card: direct popups of a card client, on their own carrier node.
+struct card_popup {
+	Client *client;
+	struct wlr_scene_tree *carrier;
+	struct wl_list link;
+	struct wl_listener commit;
 };
 
 // Hides the real surface tree and builds the card; no-op if one exists or the

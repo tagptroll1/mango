@@ -118,7 +118,7 @@ int main(void) {
 		}
 
 		card_popup_destroy(&popup);
-		assert(!popup.card_client && wl_list_empty(&client.card.popups));
+		assert(!popup.card.client && wl_list_empty(&client.card.popups));
 		assert(wl_list_empty(&surface.events.commit.listener_list));
 		assert(wl_list_empty(&xdg.events.destroy.listener_list));
 		card_popup_destroy(&popup);
