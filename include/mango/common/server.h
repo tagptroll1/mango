@@ -185,6 +185,7 @@ struct MangoServer {
 	int32_t session_locked;
 	uint32_t locked_modifiers;
 	void *exclusive_focus;
+	bool sloppy_pending;
 	pid_t child_pid;
 
 	/* Pre-baked animation curves */

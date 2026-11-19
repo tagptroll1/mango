@@ -1447,6 +1447,9 @@ void pointer_focus(Client *c, struct wlr_surface *surface, double sx, double sy,
 				   uint32_t time) {
 	struct timespec now;
 
+	if (!time && surface != server.seat->pointer_state.focused_surface)
+		server.sloppy_pending = true;
+
 	/* A data-device drag owns pointer focus, while its keyboard grab keeps the
 	 * previous keyboard surface. Do not turn each drag motion into a focus
 	 * change: the keyboard focus would be restored after the drag ends. */
@@ -1454,10 +1457,14 @@ void pointer_focus(Client *c, struct wlr_surface *surface, double sx, double sy,
 		c && time && c->scene && c->scene->node.enabled &&
 		(!c->mon || !is_overcircle_mode(c->mon)) && !c->animation.tagining &&
 		(surface != server.seat->pointer_state.focused_surface ||
+		 server.sloppy_pending ||
 		 (server.selected_monitor && server.selected_monitor->isoverview &&
 		  server.selected_monitor->sel != c)) &&
 		!client_is_unmanaged(c) && VISIBLEON(c, c->mon))
 		client_focus(c, 0);
+
+	if (time)
+		server.sloppy_pending = false;
 
 	/* Pointer-driven layer constraints: deactivate as soon as the pointer
 	 * leaves their surface. Toplevel constraints are managed by focusclient
